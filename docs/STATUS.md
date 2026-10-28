@@ -508,6 +508,46 @@ exact toolchain (Maven 3.9.16 + Temurin JDK 21.0.12.1). Nothing else blocked.
   green; the catalog job ran 19 tests and the warehouse job ran 17
   tests on the runner (container-backed, per the earlier evidence).
 
+## Phase 4 progress log
+
+- 2026-10-28 17:15-17:40+07:00: unit 4.1 (multi-stage Dockerfiles,
+  non-root runtime) `VERIFIED`. Image tags verified live against Docker
+  Hub API before use (no floating-guessing): builder
+  `maven:3.9.16-eclipse-temurin-21` (exact Maven version the mvnw
+  wrapper uses on the host) and runtime
+  `eclipse-temurin:21.0.12.1_1-jre-alpine-3.24` (exact JDK build the
+  host compiles with). One multi-stage Dockerfile per app
+  (discovery-server, api-gateway, catalog-service, warehouse-service):
+  dependency layer (`mvn dependency:go-offline` on pom.xml only) then
+  source layer then `package -DskipTests`; runtime stage copies the
+  repackaged jar, creates an unprivileged `app` user
+  (`addgroup -S app && adduser -S -G app app`), runs as `USER app` and
+  `java -jar app.jar` - the service ports (8080-8082, 8761) are all
+  >1024 so no privileged binding is needed. `.dockerignore` per app
+  keeps `target/`, `.mvn/` and the wrapper scripts out of the build
+  context. Build evidence: `docker build` exit 0 for all four images,
+  tagged `stockflow/<name>:0.0.1-SNAPSHOT`. Smoke evidence (temp
+  containers on the existing compose network, removed afterwards):
+  every container runs as user `app` (docker exec whoami -> app, all
+  four - non-root criterion met by execution, not assumption);
+  discovery booted standalone (health UP after ~20 s); catalog and
+  warehouse booted against the compose postgres through internal DNS
+  (`jdbc:postgresql://stockflow-postgres:5432/{catalogdb,warehousedb}`,
+  Flyway validated, JPA started, health UP) proving the runtime images
+  work against the real engine, not just compile; gateway health UP.
+  All health checks returned {"status":"UP"} on temporary
+  127.0.0.1-only published ports (18761/18080-18082, smoke-only, no
+  compose change). Honest notes: CI still verifies via mvnw only -
+  image builds are not yet exercised on clean-clone runners (a
+  compose-based CI job is a candidate later in Phase 4 if needed);
+  runtime images are not pushed to any registry - local daemon only,
+  Phase 4 compose builds them from source; the smoke runs used
+  EUREKA_CLIENT_ENABLED=false (full-stack registration is unit 4.2's
+  subject). CI evidence: run 40673481363 SUCCESS on commit `34778ed`
+  (headSha-matched before watching) - all four matrix jobs green
+  (Dockerfiles do not affect the mvnw CI path; run recorded to keep the
+  chain continuous).
+
 ## Phase 3 gate review (2026-10-28, closing Phase 3)
 
 Every ROADMAP Phase 3 deliverable and acceptance criterion, checked
