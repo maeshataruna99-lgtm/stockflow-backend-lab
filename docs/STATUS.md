@@ -136,3 +136,18 @@ exact toolchain (Maven 3.9.16 + Temurin JDK 21.0.12.1). Nothing else blocked.
   Phase 1 gate: an explicit start-and-health check per app, configuration
   profiles, and the CI workflow with a recorded Actions run (needs a
   remote; none configured yet).
+- 2026-10-28 13:16-13:21+07:00: start-and-health check on all four apps
+  with the dev profile (`.\mvnw.cmd --batch-mode spring-boot:run
+  "-Dspring-boot.run.profiles=dev"`; spring-boot:run recompiled because
+  the earlier jars predate the profiles merge). Logs confirm profile
+  "dev" active on every app; the discovery server log registered
+  CATALOG-SERVICE, WAREHOUSE-SERVICE and API-GATEWAY with status UP at
+  13:18:05-07 and each client logged `registration status: 204`. Every
+  app answered HTTP 200 on /actuator/health with {"status":"UP"}:
+  discovery 8761 (first 200 after ~16 s), gateway 8080 (Netty), catalog
+  8081, warehouse 8082 (already up at first attempt). Honest notes: the
+  demo and prod profiles are implemented but not yet exercised - dev is
+  the only live-proven profile so far (demo/prod get real use in Phases
+  2/4); the first registry read misreported empty due to a PowerShell
+  content-type quirk, the re-read returned the raw UP_3_ registry; all
+  four java processes were stopped afterwards.

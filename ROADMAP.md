@@ -271,16 +271,18 @@ baseline, CI workflow.
 - [x] Maven Wrapper for every application (distribution pinned 3.9.16).
 - [x] Spring MVC baseline and Actuator (services are MVC; the gateway is
       reactive by decision, ADR 0005; actuator health exposed in all four).
-- [ ] Configuration profiles (dev/demo/prod files not yet written;
-      scheduled with Phase 2 configuration work).
+- [x] Configuration profiles (dev/demo/prod for all four apps, commit
+      `0ba3f09` by another agent, merged via PR #1; the dev profile is
+      live-verified on all four apps - docs/STATUS.md - while demo/prod
+      stay unexercised until Phase 2/4 gives them real use).
 - [x] Unit-test baseline (one context test per app, 4/4 green). Deeper
       suites arrive with Phase 2-3 features.
 - [ ] CI workflow (needs a GitHub remote and a recorded Actions run).
 
 **Acceptance criteria**
-- [ ] Each app starts locally with documented config - context tests load
-      the context in a mock environment but no real start and
-      `/actuator/health` call has been recorded yet; owed before the gate.
+- [x] Each app starts locally with documented config (dev profile live on
+      all four ports, /actuator/health {"status":"UP"} on each, eureka
+      registry UP_3_ - 2026-10-28 13:16-13:21+07:00; docs/STATUS.md).
 - [x] Each `./mvnw clean verify` succeeds independently (2026-10-28,
       evidence in `docs/STATUS.md`).
 - [x] Application context tests pass (1 per app, 4 total).
