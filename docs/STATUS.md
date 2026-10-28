@@ -45,7 +45,9 @@ evidence below remains the gate.
 
 `e59df72` (feat(compose): core stack with internal network and
 discovery) is the latest code state, verified green by Actions run
-40674415027 (all four matrix jobs SUCCESS). Earlier chain: unit 4.1
+40674415027 (all four matrix jobs SUCCESS); the latest commit is the
+docs commit `0070255` (local setup guide + hostdev override, run
+40674854953 SUCCESS). Earlier chain: unit 4.1
 commit `34778ed` (Dockerfiles, run 40673481363), docs commit `1a9117b`;
 unit 3.4 commit `f642b38` (run 40669289647, catalog 19 + warehouse 17
 tests), docs commit `adbc761`; unit 3.3 commit `30648a8` (run
@@ -631,7 +633,10 @@ exact toolchain (Maven 3.9.16 + Temurin JDK 21.0.12.1). Nothing else blocked.
   Docker layer cache); a cold-cache clean-clone timing was not measured
   - first `up --build` on a fresh clone takes longer (dependency
   downloads inside the builder stage) but the commands are identical.
-
+  CI evidence: run 40674854953 SUCCESS on commit `0070255`
+  (headSha-matched before watching) - all four matrix jobs green;
+  with this the Phase 4 gate review above is fully evidenced by CI as
+  well.
 ## Phase 4 gate review (2026-10-28, closing Phase 4)
 
 Every ROADMAP Phase 4 deliverable and acceptance criterion, checked
