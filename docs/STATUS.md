@@ -248,4 +248,7 @@ exact toolchain (Maven 3.9.16 + Temurin JDK 21.0.12.1). Nothing else blocked.
   exercise migrations (real DB tests are Phase 3/Testcontainers); the
   live runs had no discovery/gateway running, so eureka client logs
   show connection-refused noise - expected, non-fatal, and out of this
-  unit's scope; passwords came from .env, never echoed or logged.
+  unit's scope; passwords came from .env, never echoed or logged. CI:
+  run 40648268572 (unit 2.1 commit `e5ecdee`) and run 40651087397
+  (this commit) both SUCCESS, all four matrix jobs green in ~30 s,
+  only the known informational Ubuntu 26 note.
