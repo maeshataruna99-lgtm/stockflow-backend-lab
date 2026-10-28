@@ -7,9 +7,10 @@ that actually ran. A checkbox is tracking, not evidence.
 
 Phase 0 - repository and design baseline: `VERIFIED` (committed as
 `24addaa`).
-Phase 1 - Maven/Spring Boot foundations: `IN PROGRESS` (opened 2026-10-28;
-JDK toolchain decided in `docs/decisions/0004-jdk-toolchain.md`; first task is
-the `discovery-server` scaffold). Phase 0 evidence below remains the gate.
+Phase 1 - Maven/Spring Boot foundations: `IN PROGRESS` (JDK toolchain
+decided in ADR 0004). First app `discovery-server` scaffold `VERIFIED`
+(2026-10-28 11:50+07:00, evidence below); next in order: `api-gateway`.
+Phase 0 evidence below remains the gate.
 
 ## Last verified commit
 
@@ -80,9 +81,14 @@ exact toolchain (Maven 3.9.16 + Temurin JDK 21.0.12.1). Nothing else blocked.
 - 2026-10-28: JDK prerequisite closed by measurement - Maven 3.9.16 runs on
   Temurin JDK 21.0.12.1 (JAVA_HOME); build target stays Java 21 via
   `--release 21` (ADR 0004, corrected after the measurement).
-- Next: scaffold `discovery-server` (pinned parent 3.5.16 plus Spring Cloud
-  2025.0.3 BOM, own Maven Wrapper, minimal Eureka server, context test).
-  Until real `mvnw.cmd --batch-mode clean verify` evidence exists, its status
-  is `IMPLEMENTED - NOT VERIFIED`.
+- 2026-10-28 11:50+07:00: `discovery-server` scaffold `VERIFIED` - command
+  `.\mvnw.cmd --batch-mode clean verify` in `apps/discovery-server`, exit 0,
+  BUILD SUCCESS, total time 01:03 min; tests run 1, failures 0, errors 0,
+  skipped 0 (`DiscoveryServerApplicationTests.contextLoads`); the test JVM
+  ran Java 21.0.12.1 and javac compiled with `release 21`; Spring Boot banner
+  v3.5.16; repackage produced `target/discovery-server-0.0.1-SNAPSHOT.jar`.
+  Honest notes: no Bean Validation provider on the classpath yet (expected
+  until services add validation), plus non-fatal Mockito dynamic-agent and
+  Spring Cloud LoadBalancer default-cache warnings.
 - Then, one app per task with the same evidence rule: `api-gateway`,
   `catalog-service`, `warehouse-service`.
