@@ -41,10 +41,14 @@ class CatalogRepositoryTest extends AbstractCatalogIntegrationTest {
 
     @Test
     void seedDataIsVisibleThroughJpa() {
+        // categories and units are read-only in this codebase (no writes
+        // anywhere), so exact counts are stable; products/skus accumulate
+        // rows from other test classes sharing the singleton container,
+        // so they assert visibility of the seed, not exclusive counts.
         assertThat(categoryRepository.count()).isEqualTo(2);
         assertThat(unitRepository.count()).isEqualTo(2);
-        assertThat(productRepository.count()).isEqualTo(2);
-        assertThat(skuRepository.count()).isEqualTo(2);
+        assertThat(productRepository.count()).isGreaterThanOrEqualTo(2);
+        assertThat(skuRepository.count()).isGreaterThanOrEqualTo(2);
 
         Product seeded = productRepository.findById(1L).orElseThrow();
         assertThat(seeded.getSku()).isEqualTo("SPK-X1");

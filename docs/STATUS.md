@@ -20,7 +20,8 @@ root-user items are deliberately deferred to Phase 5 per ADR 0003
 obligation there, not as an open risk here. Phase 3 - JPA persistence,
 /api/v1 endpoints and Testcontainers tests - is in progress, one unit
 per commit: unit 3.1 (JPA foundation in catalog-service) `VERIFIED`
-2026-10-28, units 3.2-3.4 pending. Phase 0 evidence below remains the
+2026-10-28, unit 3.2 (catalog products API) `VERIFIED` 2026-10-28,
+units 3.3-3.4 pending. Phase 0 evidence below remains the
 gate.
 
 ## Last verified commit
@@ -325,3 +326,69 @@ exact toolchain (Maven 3.9.16 + Temurin JDK 21.0.12.1). Nothing else blocked.
   run: 4, Failures: 0, Errors: 0) with a 12.9 s first test class proves
   the container started and Flyway migrated on the ubuntu runner, so
   the real-database tests are enforced in CI, not only locally.
+
+- 2026-10-28 16:50-17:05+07:00: unit 3.2 (catalog products API)
+  `VERIFIED`. Endpoints per initial-api-outline.md: GET/POST
+  /api/v1/products, GET/PATCH /api/v1/products/{id}, GET
+  /api/v1/categories. DTOs only (ProductRequest/ProductUpdateRequest/
+  ProductResponse/CategoryResponse records; entities never serialized),
+  Bean Validation via the new spring-boot-starter-validation dependency,
+  RFC 7807 problem+json through a shared @RestControllerAdvice
+  (400 validation with field-error map, 404 missing resource, 409
+  duplicate sku via existsBySku pre-check plus a
+  DataIntegrityViolationException safety net for constraint races).
+  Pagination policy in one shared helper: page 0-based, size default 20
+  clamped into 1..100, so a size=500 request is served with size 100
+  (criterion "pagination has a maximum page size"). The documented JPQL
+  query lives in ProductRepository.searchAll: active/category/search
+  filters, all optional, combined with the ":param is null or ..." pattern.
+  Page responses serialize through the stable spring-data DTO
+  (@EnableSpringDataWebSupport VIA_DTO on the application class -
+  the {"content":[...],"page":{...}} shape), so Boot 3.5's
+  PageImpl-serialization warning never appears.
+  Design adjustment vs unit 3.1 (documented on purpose): the audit
+  timestamp columns moved from insertable=false/updatable=false to
+  Hibernate @CreationTimestamp/@UpdateTimestamp. Reason: with
+  insertable=false Hibernate never reads back the DEFAULT now() value,
+  so a POST response would carry createdAt=null; writing the timestamps
+  from the app keeps API responses truthful while the database defaults
+  remain as a safety net for non-Hibernate writes. Schema unchanged -
+  Hibernate validate still passes. PATCH uses saveAndFlush so the
+  returned updatedAt is the flushed value, not the pre-update one.
+  Failures found and fixed by evidence: (1) the first full test run
+  failed CatalogRepositoryTest.seedDataIsVisibleThroughJpa because the
+  API test class had already created products in the shared singleton
+  container - exact count assertions were order-dependent; product/sku
+  assertions relaxed to >= seed counts while read-only categories/units
+  keep exact counts. (2) THE BIG ONE, caught by the live HTTP round not
+  by MockMvc: GET /api/v1/products?page=0&size=500 returned 500 with
+  PostgreSQL "function lower(bytea) does not exist" (SQLState 42883,
+  pgjdbc 42.7.11, Hibernate 6.6.53): an unspecified null parameter
+  inside lower(concat('%', :search, '%')) got resolved to bytea by the
+  server. Fix: explicit casts on every nullable parameter in the JPQL
+  (cast(:active as Boolean), cast(:categoryId as Long),
+  cast(:search as String)). Oddity recorded honestly: the same query
+  with null parameters PASSED under MockMvc against the Testcontainers
+  postgres minutes earlier - the exact trigger for the difference is
+  unresolved; the cast makes the query type-safe regardless, and both
+  paths were re-verified green after the fix.
+  Live run caught a second subtlety: the PATCH response initially
+  returned a stale updatedAt because @UpdateTimestamp only applies at
+  flush - fixed with saveAndFlush (above). Build evidence: catalog
+  clean verify BUILD SUCCESS (17 tests: 13 API + 1 context + 3
+  repository, 0 failures, ~51 s). Live HTTP evidence against the
+  compose postgres (profile dev, password from .env, never echoed):
+  health UP; GET /api/v1/products?page=0&size=500 -> 200 with
+  "page":{"size":100}; GET /api/v1/products?search=spk&categoryId=1
+  -> 200 exactly the seeded SPK-X1; GET /api/v1/products/9999 -> 404
+  application/problem+json with the documented title/detail; POST with
+  blank fields -> 400 problem+json listing errors.sku/name/categoryId/
+  unitId; POST duplicate sku SPK-X1 -> 409 problem+json; PATCH -> 200
+  with a fresh updatedAt and durable state confirmed by a follow-up
+  GET; POST -> 201 with Location header and populated timestamps.
+  Honest notes: the long-lived compose catalogdb now carries one extra
+  product row (LIVE-3.2, id 3) created during the live proof and the
+  seed row 2's updated_at advanced - dev demo data, never part of test
+  assertions (tests assert on their own fixtures); warehouse endpoints
+  wait for unit 3.3; OpenAPI annotations/springdoc wait for unit 3.4,
+  so "OpenAPI reflects actual behavior" is not yet claimed.
