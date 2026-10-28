@@ -4,6 +4,21 @@ server:
 spring:
   application:
     name: catalog-service
+  datasource:
+    # Pooled HikariCP DataSource (spring-boot-starter-jdbc). The first run
+    # without a real DataSource bean showed that Boot silently skips
+    # FlywayAutoConfiguration when no DataSource exists - hence
+    # starter-jdbc instead of the flyway-owns-its-connection attempt
+    # (evidence in docs/STATUS.md). JPA arrives in Phase 3 on this
+    # same DataSource. POSTGRES_PORT defaults to 15432 because a native
+    # PostgreSQL 18 service holds 5432 on this machine (see compose.yaml).
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:15432}/catalogdb
+    username: catalog_app
+    # No default: startup fails fast when the password env is missing.
+    password: ${CATALOG_DB_PASSWORD}
+  flyway:
+    # Migrates the primary DataSource above on every startup.
+    locations: classpath:db/migration
 
 eureka:
   client:

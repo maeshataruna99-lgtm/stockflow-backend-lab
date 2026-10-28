@@ -11,8 +11,10 @@ Phase 1 - Maven/Spring Boot foundations: `VERIFIED` (2026-10-28, gate
 closed - evidence below).
 Phase 2 - PostgreSQL, Flyway and seed data: `IN PROGRESS` - unit 2.1
 (compose postgres + init scripts) `VERIFIED` 2026-10-28; unit 2.2
-(Flyway migrations + datasource config) is next. Phase 0 evidence below
-remains the gate.
+(Flyway migrations + datasource config) `VERIFIED` 2026-10-28; Phase 2
+remaining: full phase gate review (all acceptance criteria already
+evidenced except the deferred root-user items, ADR 0003/Phase 5).
+Phase 0 evidence below remains the gate.
 
 ## Last verified commit
 
@@ -152,6 +154,12 @@ exact toolchain (Maven 3.9.16 + Temurin JDK 21.0.12.1). Nothing else blocked.
   2/4); the first registry read misreported empty due to a PowerShell
   content-type quirk, the re-read returned the raw UP_3_ registry; all
   four java processes were stopped afterwards.
+  CORRECTION (2026-10-28, found during Phase 2 unit 2.2): that stop only
+  killed the mvnw wrapper processes - the four child java.exe processes
+  were orphaned and kept listening on 8080/8081/8082/8761 until they
+  were identified via netstat+CommandLine and killed during unit 2.2
+  (see the Phase 2 log). Lesson recorded: on Windows, stopping
+  spring-boot:run means killing the child java.exe, not the wrapper.
 - 2026-10-28 13:13-13:24+07:00: CI workflow landed and verified on real
   GitHub Actions runs. Run 1 (40642546618, commit `ed956ef`) FAILED in
   12 s: every matrix job exited 126 with `./mvnw: Permission denied` -
@@ -205,3 +213,39 @@ exact toolchain (Maven 3.9.16 + Temurin JDK 21.0.12.1). Nothing else blocked.
   because the Java services still run on the host (mvnw); Phase 4 removes
   the publishing entirely. Docker-compose image pull succeeded
   (`postgres:16.15-alpine` per ADR 0001).
+
+- 2026-10-28 14:15-14:35+07:00: unit 2.2 (Flyway migrations +
+  datasource config) `VERIFIED`. Design deviation found by evidence, not
+  assumption: the planned "Flyway owns its own connection via
+  spring.flyway.url, no spring-jdbc until Phase 3" does NOT work on Boot
+  3.5.16 - the first live run started fine but silently skipped
+  FlywayAutoConfiguration (no DataSource bean exists without spring-jdbc;
+  zero flyway lines in the log, empty databases). Fix:
+  spring-boot-starter-jdbc added to both poms (HikariCP + a real
+  DataSource; JPA still waits for Phase 3), config moved to
+  spring.datasource.* with spring.flyway.locations. Also found and
+  cleaned during the first run: four orphaned java.exe processes from
+  Phase 1 still held 8080/8081/8082/8761 (wrapper-only stop back then;
+  correction noted in the Phase 1 log above), which made a fake
+  health-check "UP" before any real migration. After killing them by
+  PID and re-running with fresh builds: both services started on
+  profile dev, HikariPool connected to
+  jdbc:postgresql://localhost:15432/{catalogdb,warehousedb}
+  (PostgreSQL 16.15), Flyway migrated V1 (schema) + V2 (seed) with
+  success=t on both databases. psql evidence: catalogdb tables
+  categories/units/products/skus (+ flyway_schema_history) all owned by
+  catalog_app, row counts 2/2/2/2; warehousedb tables
+  warehouses/storage_locations (+ flyway_schema_history) all owned by
+  warehouse_app, row counts 1/3. Restart proof: both services stopped
+  (java.exe killed, verified 0 remaining), started again - Flyway
+  logged "Successfully validated 2 migrations ... Schema \"public\" is
+  up to date. No migration necessary." and row counts were identical
+  (2/2/2/2 and 1/3) - no seed duplication. Build evidence: catalog
+  clean verify BUILD SUCCESS (1 test, 27.3 s), warehouse BUILD SUCCESS
+  (1 test, 34.5 s), Flyway 11.7.2 resolved via the Boot BOM. Honest
+  notes: test contexts exclude DataSourceAutoConfiguration and
+  FlywayAutoConfiguration, so CI stays database-free; unit tests do not
+  exercise migrations (real DB tests are Phase 3/Testcontainers); the
+  live runs had no discovery/gateway running, so eureka client logs
+  show connection-refused noise - expected, non-fatal, and out of this
+  unit's scope; passwords came from .env, never echoed or logged.

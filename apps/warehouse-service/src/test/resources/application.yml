@@ -1,3 +1,13 @@
+# Test profile: no database and no eureka on the classpath test.
+# Phase 2 runs Flyway against real databases during live verification
+# (docs/STATUS.md), not inside unit tests; JPA arrives with real
+# database tests in Phase 3.
 eureka:
   client:
     enabled: false
+
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration
