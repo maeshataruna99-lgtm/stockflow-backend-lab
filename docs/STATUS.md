@@ -22,20 +22,32 @@ obligation there, not as an open risk here. Phase 3 - JPA persistence,
 per commit: unit 3.1 (JPA foundation in catalog-service) `VERIFIED`
 2026-10-28, unit 3.2 (catalog products API) `VERIFIED` 2026-10-28,
 unit 3.3 (warehouse API) `VERIFIED` 2026-10-28, unit 3.4 (OpenAPI)
-`VERIFIED` 2026-10-28. Phase 3 gate review is the remaining Phase 3
-item; Phase 0 evidence below remains the gate.
+`VERIFIED` 2026-10-28. Gate review 2026-10-28: every Phase 3
+deliverable and acceptance criterion has recorded evidence - all six
+catalog endpoints and all six warehouse endpoints live-proven; 400/404/
+409 contracts proven on both services; entities never serialized
+(DTO-only + open-in-view off + VIA_DTO page serialization); pagination
+capped at 100; the documented JPQL query exercised; 19 catalog + 17
+warehouse tests green locally and in CI; springdoc 2.10.0 serves
+/v3/api-docs and Swagger UI on both services with documents matching
+actual behavior. Two items are deliberately deferred with their owning
+phases: production-profile root seeding (Phase 5, ADR 0003) and
+production-profile verification (Phase 4). Phase 4 - Docker Compose
+core and service discovery - is next. Phase 0 evidence below remains
+the gate.
 
 ## Last verified commit
 
-`30648a8` (feat(warehouse): warehouses and locations api with dto
-validation) is the latest code state, verified green by Actions run
-40668312313 (all four matrix jobs SUCCESS; the warehouse job ran 15
-tests, 1+14, against the container on the runner). Earlier
-chain: unit 3.2 commit `85a33d3` (run 40667190280), docs commit
-`d55504e`; unit 3.1 commit `78569f3` (run 40665107969), docs commit
-`cadfc6d`; Phase 2: unit 2.1 commit `e5ecdee` (run
-40648268572), unit 2.2 commit `0c350e4` (run 40651087397); live psql
-and restart evidence 14:05-14:35+07:00 below.
+`f642b38` (feat(api): springdoc openapi docs reflecting actual
+behavior) is the latest code state, verified green by Actions run
+40669289647 (all four matrix jobs SUCCESS; the catalog job ran 19
+tests and the warehouse job 17 tests against the container on the
+runner). Earlier chain: unit 3.3 commit `30648a8` (run 40668312313,
+warehouse 15 tests), docs commit `2ac8613`; unit 3.2 commit `85a33d3`
+(run 40667190280), docs commit `d55504e`; unit 3.1 commit `78569f3`
+(run 40665107969), docs commit `cadfc6d`; Phase 2: unit 2.1 commit
+`e5ecdee` (run 40648268572), unit 2.2 commit `0c350e4` (run
+40651087397); live psql and restart evidence 14:05-14:35+07:00 below.
 
 ## Phase 0 task status (2026-10-28)
 
@@ -491,5 +503,62 @@ exact toolchain (Maven 3.9.16 + Temurin JDK 21.0.12.1). Nothing else blocked.
   confirmation); springdoc logs its own "enabled by default" notices -
   harmless here, and the production disabling question is deferred to
   Phase 4/5 configuration; the live runs created no demo data this time
-  (read-only checks). CI evidence: recorded in the follow-up docs
-  commit (run id added there, matched to this commit's headSha).
+  (read-only checks). CI evidence: run 40669289647 SUCCESS on commit
+  `f642b38` (headSha-matched before watching) - all four matrix jobs
+  green; the catalog job ran 19 tests and the warehouse job ran 17
+  tests on the runner (container-backed, per the earlier evidence).
+
+## Phase 3 gate review (2026-10-28, closing Phase 3)
+
+Every ROADMAP Phase 3 deliverable and acceptance criterion, checked
+against recorded evidence only:
+
+- Catalog API minimum (all six endpoints): `VERIFIED` - unit 3.2;
+  live HTTP evidence (list/filter/create/get/patch, categories list)
+  and 13 MockMvc tests, plus 3 repository tests exercising the JPQL
+  query through the real engine.
+- Warehouse API minimum (all six endpoints): `VERIFIED` - unit 3.3;
+  live HTTP evidence (list/get/create/patch/locations list+create) and
+  14 MockMvc tests.
+- DTO validation returns documented 400 responses: `VERIFIED` - live
+  proof on both services (catalog POST blank fields -> 400 problem+json
+  listing errors.sku/name/categoryId/unitId; warehouse POST blank
+  code/name and blank location code -> 400 with the errors map), plus
+  dedicated tests.
+- Missing resource returns 404: `VERIFIED` - catalog GET /9999 and
+  warehouse GET /9999 + GET /9999/locations -> 404 problem+json live;
+  dedicated tests; the warehouse locations variant proves 404, not an
+  empty page.
+- Duplicate SKU/code returns documented 409: `VERIFIED` - live proof:
+  catalog duplicate sku, warehouse duplicate WH-JKT01, duplicate
+  location code within one warehouse (409) vs the same code in another
+  warehouse (201); dedicated tests.
+- Public APIs never serialize JPA entities directly: `VERIFIED` - DTO
+  records only in both services, open-in-view=false, and page
+  serialization via the stable spring-data DTO (VIA_DTO).
+- Pagination has a maximum page size: `VERIFIED` - the shared
+  Pagination helper clamps size into 1..100; live size=500 was served
+  with page.size=100 on both services.
+- JPQL is used by at least one documented query: `VERIFIED` -
+  ProductRepository.searchAll (optional active/category/search filters,
+  explicit casts after the bytea lesson), exercised by repository tests
+  and the live search=spk&categoryId=1 call.
+- Repository/service/controller tests cover happy paths and failure
+  paths: `VERIFIED` - catalog 19 tests, warehouse 17 tests, both
+  against real PostgreSQL containers locally AND in CI (runs
+  40669289647, plus the per-unit runs recorded above).
+- OpenAPI reflects actual behavior: `VERIFIED` - unit 3.4; springdoc
+  2.10.0 serves /v3/api-docs + Swagger UI live on both services; the
+  document's path lists match the controllers exactly (foreign paths
+  absent, asserted by tests); documented response codes were spot
+  checked against the served documents (201/400/409 on POSTs, 200/404
+  on GETs).
+
+Phase 3 overall: CLOSED - all deliverables and acceptance criteria have
+recorded evidence; nothing was claimed without a command that actually
+ran. Carried-forward notes remain honest open items, not gate failures:
+the stack is past OSS EOL 2026-06-30 (upgrade needs an explicit user
+decision + superseding ADR); demo/prod profiles stay unexercised until
+Phase 4; root-account seeding remains deferred to Phase 5 (ADR 0003);
+springdoc "enabled by default" production disabling is a Phase 4/5
+configuration question.
