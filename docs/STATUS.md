@@ -22,7 +22,8 @@ obligation there, not as an open risk here. Phase 3 - JPA persistence,
 per commit: unit 3.1 (JPA foundation in catalog-service) `VERIFIED`
 2026-10-28, unit 3.2 (catalog products API) `VERIFIED` 2026-10-28,
 unit 3.3 (warehouse API) `VERIFIED` 2026-10-28, unit 3.4 (OpenAPI)
-pending. Phase 0 evidence below remains the gate.
+`VERIFIED` 2026-10-28. Phase 3 gate review is the remaining Phase 3
+item; Phase 0 evidence below remains the gate.
 
 ## Last verified commit
 
@@ -454,3 +455,41 @@ exact toolchain (Maven 3.9.16 + Temurin JDK 21.0.12.1). Nothing else blocked.
   proves the container started and Flyway migrated on the ubuntu
   runner, so the real-database warehouse tests are enforced in CI, not
   only locally.
+
+- 2026-10-28 17:00-17:15+07:00: unit 3.4 (OpenAPI via springdoc)
+  `VERIFIED`. springdoc-openapi-starter-webmvc-ui 2.10.0 (the ADR 0001
+  pin; not managed by the Boot BOM, so an explicit version) added to
+  both catalog and warehouse poms. Each service gains a small
+  OpenApiConfig (document title/description/version) and the controllers
+  got swagger annotations that document exactly the behavior the tests
+  and live runs already proved: 201 + Location header on POST,
+  400 problem+json with the errors map on bean-validation failures,
+  404 on missing resources, 409 on duplicate codes (including the
+  per-warehouse location-code uniqueness and the PATCH-rename-to-
+  existing-code conflict), and the pagination clamp on every list
+  endpoint - "OpenAPI reflects actual behavior" is claimed from this
+  unit on, backed by construction (annotations mirror the implemented
+  handlers). New test per service (OpenApiDocsTest, MockMvc): GET
+  /v3/api-docs returns 200 with the service's document title, the real
+  controller paths present, and foreign paths absent (warehouse paths
+  not in catalog's doc and vice versa). Build evidence: catalog clean
+  verify BUILD SUCCESS, 19 tests (1 context + 3 repository + 13 API +
+  2 OpenAPI), 0 failures/errors, 58.559 s, exit 0; warehouse clean
+  verify BUILD SUCCESS, 17 tests (1 context + 14 API + 2 OpenAPI),
+  0 failures/errors, 50.263 s, exit 0. Live evidence, both services on
+  profile dev against the compose postgres (passwords from .env, never
+  echoed): health UP (catalog ~10 s, warehouse already up); GET
+  /v3/api-docs -> 200 application/json on both with the correct titles
+  ("StockFlow catalog-service API" / "StockFlow warehouse-service API",
+  version v1) and exactly the documented path lists; GET
+  /swagger-ui/index.html -> 200 text/html on both; response-code spot
+  check in the served document: catalog POST /api/v1/products -> 201/
+  400/409; warehouse POST /api/v1/warehouses -> 201/400/409, GET
+  /{id} -> 200/404, GET /{id}/locations -> 200/404. Honest notes: both
+  child java.exe processes were killed after the live proof (PIDs
+  23152, 9360; the trailing maven exit code -1 is the kill
+  confirmation); springdoc logs its own "enabled by default" notices -
+  harmless here, and the production disabling question is deferred to
+  Phase 4/5 configuration; the live runs created no demo data this time
+  (read-only checks). CI evidence: recorded in the follow-up docs
+  commit (run id added there, matched to this commit's headSha).
