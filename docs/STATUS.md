@@ -9,19 +9,25 @@ Phase 0 - repository and design baseline: `VERIFIED` (committed as
 `24addaa`).
 Phase 1 - Maven/Spring Boot foundations: `VERIFIED` (2026-10-28, gate
 closed - evidence below).
-Phase 2 - PostgreSQL, Flyway and seed data: `IN PROGRESS` - unit 2.1
-(compose postgres + init scripts) `VERIFIED` 2026-10-28; unit 2.2
-(Flyway migrations + datasource config) `VERIFIED` 2026-10-28; Phase 2
-remaining: full phase gate review (all acceptance criteria already
-evidenced except the deferred root-user items, ADR 0003/Phase 5).
-Phase 0 evidence below remains the gate.
+Phase 2 - PostgreSQL, Flyway and seed data: `VERIFIED` (2026-10-28, gate
+closed - evidence below). Gate review 2026-10-28: every deliverable and
+acceptance criterion has live evidence (compose service + volume +
+healthcheck; two owned databases with isolated least-privilege roles,
+four-way psql isolation proof; Flyway V1+V2 success on both databases
+from version 0; deterministic seeds stable across restart). Two
+root-user items are deliberately deferred to Phase 5 per ADR 0003
+(nothing can seed or verify a user before auth exists) - carried as an
+obligation there, not as an open risk here. Next: Phase 3 - JPA
+persistence, /api/v1 endpoints and Testcontainers tests, one unit per
+commit. Phase 0 evidence below remains the gate.
 
 ## Last verified commit
 
-`2e43056` (ci: pin actions to current maintained versions) is the latest
-code state, verified green by Actions run 40643409693. Local app evidence:
-four builds verified 11:50-12:02 and live start-and-health checks passed
-13:16-13:21+07:00.
+`72bd778` (docs: record ci run evidence for phase 2 units 2.1 and 2.2)
+is the latest code state, verified green by Actions run 40651287248.
+Phase 2 code evidence chain: unit 2.1 commit `e5ecdee` (run
+40648268572), unit 2.2 commit `0c350e4` (run 40651087397); live psql
+and restart evidence 14:05-14:35+07:00 below.
 
 ## Phase 0 task status (2026-10-28)
 

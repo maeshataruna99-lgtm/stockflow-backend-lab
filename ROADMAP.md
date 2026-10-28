@@ -303,8 +303,12 @@ the ubuntu-latest label migrates to Ubuntu 26 (informational).
 
 ### Phase 2 --- PostgreSQL, Flyway and seed data
 
-Status: `IN PROGRESS` (units 2.1 and 2.2 VERIFIED 2026-10-28; evidence
-in docs/STATUS.md; phase gate review pending).
+Status: `VERIFIED` - gate CLOSED 2026-10-28 (units 2.1 and 2.2; full
+evidence chain in docs/STATUS.md: compose service, four-way psql
+isolation proof, Flyway V1+V2 from version 0 on both databases, seed
+row counts stable across restart, CI runs 40648268572 / 40651087397 /
+40651287248 all green). The two root-user items below carry forward to
+Phase 5 as a deferred obligation per ADR 0003.
 
 **Deliverables** - [x] PostgreSQL Compose service with health check and
 persistent volume (`compose.yaml`, `postgres:16.15-alpine`, volume
