@@ -1,0 +1,42 @@
+# Build output
+target/
+out/
+*.class
+
+# Logs
+*.log
+
+# Environment and secrets (real values never leave the machine)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local database data and dumps
+*.dump
+*.backup
+
+# IDE and OS
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+.DS_Store
+Thumbs.db
+
+# Agent and ai files stay local and are never committed
+# (commits also never carry ai attribution trailers; see AGENT_RULES.md)
+AGENT_RULES.md
+JAVA_RULES.md
+AI_AGENT_HANDOFF_PROMPT.md
+CLAUDE.md
+CLAUDE.local.md
+GEMINI.md
+.cursorrules
+.windsurfrules
+.cursor/
+.claude/
+.aider*
