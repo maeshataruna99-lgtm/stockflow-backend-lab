@@ -8,10 +8,11 @@ that actually ran. A checkbox is tracking, not evidence.
 Phase 0 - repository and design baseline: `VERIFIED` (committed as
 `24addaa`).
 Phase 1 - Maven/Spring Boot foundations: `VERIFIED` (2026-10-28, gate
-closed - evidence below). Next: Phase 2 - PostgreSQL, Flyway and seed data
-(compose postgres service with two logical databases and least-privilege
-roles per ADR 0002, flyway migrations per service, deterministic seeds).
-Phase 0 evidence below remains the gate.
+closed - evidence below).
+Phase 2 - PostgreSQL, Flyway and seed data: `IN PROGRESS` - unit 2.1
+(compose postgres + init scripts) `VERIFIED` 2026-10-28; unit 2.2
+(Flyway migrations + datasource config) is next. Phase 0 evidence below
+remains the gate.
 
 ## Last verified commit
 
@@ -166,3 +167,41 @@ exact toolchain (Maven 3.9.16 + Temurin JDK 21.0.12.1). Nothing else blocked.
   informational Ubuntu 26 migration note remains. Run 1's failure is
   kept as the proof that CI fails on a failed build, per the ROADMAP
   requirement. Phase 1 gate CLOSED.
+
+## Phase 2 progress log
+
+- 2026-10-28 14:05-14:20+07:00: unit 2.1 (compose postgres + init
+  scripts) `VERIFIED`. Prerequisite found and handled honestly: Docker
+  Desktop (per-user install) was not running; started
+  `...\Programs\DockerDesktop\Docker Desktop.exe`, engine up in ~5 s
+  (server 29.7.2, Compose v5.5.0). First `docker compose up -d` failed to
+  bind 5432 - a native PostgreSQL 18 Windows service
+  (`postgresql-x64-18`, PID 6712 postgres.exe) already holds the port
+  (verified via netstat; 5432 is NOT in the WinNAT excluded ranges). User
+  chose to keep their PostgreSQL 18 and use host port 15432 instead:
+  compose now publishes `127.0.0.1:${POSTGRES_PORT:-15432}:5432`, with
+  the reason documented in `compose.yaml` and `POSTGRES_PORT` added to
+  `.env`/`.env.example`. Evidence sequence: `docker compose config`
+  exit 0; `docker compose up -d` on a fresh named volume
+  (`stockflow-backend-lab_postgres_data`); container
+  `stockflow-postgres` healthy in ~4 s; postgres logs show initdb on the
+  empty volume then `running /docker-entrypoint-initdb.d/01-roles.sh`
+  (CREATE ROLE x2) and `02-databases.sh` (CREATE DATABASE x2, REVOKE x2).
+  psql checks against the real instance: `catalogdb owner=catalog_app`,
+  `warehousedb owner=warehouse_app`, both roles `login=true`. Isolation
+  proof (ADR 0002 runtime acceptance, four real psql connections):
+  catalog_app -> warehousedb FAILS with "permission denied for database
+  \"warehousedb\" / User does not have CONNECT privilege" (exit 2);
+  warehouse_app -> catalogdb FAILS identically (exit 2);
+  catalog_app CREATE TABLE + INSERT + DROP in catalogdb exit 0;
+  warehouse_app same in warehousedb exit 0. Persistence: `docker compose
+  restart` -> healthy again in ~6 s, both databases still present with
+  correct owners. Host reachability: `Test-NetConnection 127.0.0.1
+  -Port 15432` True; `docker compose ps` shows
+  `127.0.0.1:15432->5432/tcp`. Secrets: `.env` confirmed gitignored
+  (`git check-ignore -v .env` -> .gitignore:10); passwords were
+  randomly generated, written only to `.env`, never echoed into output
+  or committed. Honest notes: postgres remains temporarily host-published
+  because the Java services still run on the host (mvnw); Phase 4 removes
+  the publishing entirely. Docker-compose image pull succeeded
+  (`postgres:16.15-alpine` per ADR 0001).

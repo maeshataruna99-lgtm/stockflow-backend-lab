@@ -303,21 +303,39 @@ the ubuntu-latest label migrates to Ubuntu 26 (informational).
 
 ### Phase 2 --- PostgreSQL, Flyway and seed data
 
-**Deliverables** - PostgreSQL Compose service with health check and
-persistent volume. - Separate logical DBs and least-privilege roles for
-catalog and warehouse. - Flyway versioned migrations in each service. -
-Deterministic demo seed data. - Local/demo root account seeded safely.
+Status: `IN PROGRESS` (unit 2.1 VERIFIED 2026-10-28; evidence in
+docs/STATUS.md).
 
-**Acceptance criteria** - Clean database startup creates both
-databases/roles correctly. - Flyway migrations run on a fresh volume. -
-Restart does not duplicate seed data. - Catalog and warehouse roles
-cannot write to each other's database. - Root user is not seeded in
-production profile. - No actual secret appears in repository or logs.
+**Deliverables** - [x] PostgreSQL Compose service with health check and
+persistent volume (`compose.yaml`, `postgres:16.15-alpine`, volume
+`postgres_data`, healthcheck `pg_isready` on both DBs). - [x] Separate
+logical DBs and least-privilege roles for catalog and warehouse
+(`infrastructure/postgres/init/`, ADR 0002). - [ ] Flyway versioned
+migrations in each service (unit 2.2). - [ ] Deterministic demo seed
+data (unit 2.2). - [x] Local/demo root account seeded safely - DELIBERATELY
+DEFERRED to Phase 5 per ADR 0003 (auth infrastructure does not exist yet;
+noted here so the tick is not read as "implemented").
 
-**Verification** - Start from a fresh test volume/database. - Inspect
-migration history and seed row counts. - Restart services and verify row
-counts remain stable. - Test database role permissions. - Test
-production profile does not create the demo root user.
+**Acceptance criteria** - [x] Clean database startup creates both
+databases/roles correctly (initdb + init scripts on a fresh volume;
+psql-verified owners and LOGIN flags). - [ ] Flyway migrations run on a
+fresh volume (unit 2.2). - [ ] Restart does not duplicate seed data
+(unit 2.2; container restart with volume persistence already proven). -
+[x] Catalog and warehouse roles cannot write to each other's database
+(four real psql connections: cross-database CONNECT denied both ways,
+same-database create/insert/drop succeeds both ways). - [ ] Root user is
+not seeded in production profile (deferred with the seeding itself to
+Phase 5, ADR 0003). - [x] No actual secret appears in repository or logs
+(`.env` gitignored, random passwords never echoed; `.env.example` holds
+placeholders only).
+
+**Verification** - [x] Start from a fresh test volume/database (first
+compose up ran initdb on an empty named volume). - [ ] Inspect migration
+history and seed row counts (unit 2.2). - [x] Restart and verify state
+remains stable (`docker compose restart` -> healthy ~6 s, databases
+intact). - [x] Test database role permissions (isolation proof above). -
+[ ] Test production profile does not create the demo root user (Phase 5,
+ADR 0003).
 
 ### Phase 3 --- MVC/JPA/JPQL master data APIs
 

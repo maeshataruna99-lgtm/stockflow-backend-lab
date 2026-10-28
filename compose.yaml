@@ -1,0 +1,51 @@
+# Phase 2 scope: postgres only. The application services join the core
+# stack in Phase 4; redis arrives with the caching stack (Phase 6), per
+# docs/architecture/system-overview.md.
+#
+# Host publishing: 127.0.0.1 only, and only for Phase 2 - the Java services
+# still run on the host (mvnw) and must reach the database. Phase 4 moves
+# the services into the Docker network and removes host publishing so
+# postgres ends up internal-only, as the system overview plans.
+#
+# Host port: 15432, not 5432. This machine runs a native PostgreSQL 18
+# Windows service (postgresql-x64-18) that already holds 5432; verified
+# 2026-10-28 (netstat PID 6712 postgres.exe). The compose port is the host
+# side only - inside the stockflow network postgres stays on 5432, exactly
+# as the system overview says. Override with POSTGRES_PORT in .env.
+#
+# Credentials come from .env (copy .env.example and fill in per-machine
+# values). The :? checks make compose fail fast when a password is unset,
+# so the stack can never start with a known default. Never commit .env.
+#
+# Image pinned per ADR 0001 (official Docker Hub tag, checked 2026-10-28).
+
+services:
+  postgres:
+    image: postgres:16.15-alpine
+    container_name: stockflow-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_SUPER_PASSWORD:?set POSTGRES_SUPER_PASSWORD in .env}
+      # consumed by infrastructure/postgres/init/01-roles.sh on first init
+      CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?set CATALOG_DB_PASSWORD in .env}
+      WAREHOUSE_DB_PASSWORD: ${WAREHOUSE_DB_PASSWORD:?set WAREHOUSE_DB_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-15432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d catalogdb && pg_isready -U postgres -d warehousedb"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 10s
+    networks:
+      - stockflow
+    restart: unless-stopped
+
+networks:
+  stockflow:
+
+volumes:
+  postgres_data:
