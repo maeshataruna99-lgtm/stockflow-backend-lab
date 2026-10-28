@@ -8,16 +8,17 @@ that actually ran. A checkbox is tracking, not evidence.
 Phase 0 - repository and design baseline: `VERIFIED` (committed as
 `24addaa`).
 Phase 1 - Maven/Spring Boot foundations: `IN PROGRESS` (JDK toolchain
-decided in ADR 0004). Apps verified so far: `discovery-server` (11:50),
+decided in ADR 0004). All four apps verified: `discovery-server` (11:50),
 `api-gateway` (11:55, re-verified 11:58 after the ADR 0005 starter switch),
-`catalog-service` (12:00) - evidence below. Next in order:
-`warehouse-service`. Phase 0 evidence below remains the gate.
+`catalog-service` (12:00), `warehouse-service` (12:02) - evidence below.
+Remaining Phase 1 deliverables: unit-test baseline, CI workflow.
+Phase 0 evidence below remains the gate.
 
 ## Last verified commit
 
-The catalog-service scaffold commit `0e6524d` is the latest verified state;
-its verify evidence is recorded in the `docs:` commit immediately following
-it.
+The warehouse-service scaffold commit `8bbc976` is the latest verified
+state; its verify evidence is recorded in the `docs:` commit immediately
+following it.
 
 ## Phase 0 task status (2026-10-28)
 
@@ -118,4 +119,13 @@ exact toolchain (Maven 3.9.16 + Temurin JDK 21.0.12.1). Nothing else blocked.
   ran Java 21.0.12.1 and javac compiled with `release 21`; Spring Boot
   banner v3.5.16; jar repackaged. Honest notes: LoadBalancer default-cache
   and Mockito dynamic-agent warnings (non-fatal); no deprecation warnings.
-- Then, one app per task with the same evidence rule: `warehouse-service`.
+- 2026-10-28 12:02+07:00: `warehouse-service` scaffold `VERIFIED` - command
+  `.\mvnw.cmd --batch-mode clean verify` in `apps/warehouse-service`, exit
+  0, BUILD SUCCESS, total time 21.158 s; tests run 1, failures 0, errors 0,
+  skipped 0 (`WarehouseServiceApplicationTests.contextLoads`); the test JVM
+  ran Java 21.0.12.1 and javac compiled with `release 21`; jar repackaged.
+  Honest notes: LoadBalancer default-cache and Mockito dynamic-agent
+  warnings (non-fatal); no deprecation warnings. All four Phase 1 app
+  scaffolds are now verified locally; CI evidence remains open.
+- Then, one deliverable per task with the same evidence rule: unit-test
+  baseline, CI workflow.

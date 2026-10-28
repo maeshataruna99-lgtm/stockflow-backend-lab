@@ -250,11 +250,12 @@ Temurin JDK 21.0.12.1 (JAVA_HOME); the build target stays Java 21 via
 `--release 21` - decision (corrected after measurement) in
 `docs/decisions/0004-jdk-toolchain.md`. Apps are scaffolded one at a time,
 each with its own real `mvnw verify` evidence before VERIFIED.
-Progress: three of four apps VERIFIED 2026-10-28 - discovery-server 11:50,
-api-gateway 11:55 (re-verified 11:58 after the ADR 0005 starter switch),
-catalog-service 12:00+07:00 (each: `mvnw --batch-mode clean verify` exit 0;
-one context test on JDK 21.0.12.1; details in `docs/STATUS.md`). Remaining
-here: warehouse-service, unit-test baseline, CI workflow.
+Progress: all four app scaffolds VERIFIED 2026-10-28 - discovery-server
+11:50, api-gateway 11:55 (re-verified 11:58 after the ADR 0005 starter
+switch), catalog-service 12:00, warehouse-service 12:02+07:00 (each:
+`mvnw --batch-mode clean verify` exit 0; one context test on
+JDK 21.0.12.1; details in `docs/STATUS.md`). Remaining here: unit-test
+baseline, CI workflow.
 
 **Deliverables** - Independently buildable applications: gateway,
 discovery server, catalog, warehouse. - Maven Wrapper for every
