@@ -5,8 +5,11 @@ that actually ran. A checkbox is tracking, not evidence.
 
 ## Current phase
 
-Phase 0 - repository and design baseline.
-Next: Phase 1 (Maven/Spring Boot foundations), gated on the Phase 0 evidence below.
+Phase 0 - repository and design baseline: `VERIFIED` (committed as
+`24addaa`).
+Phase 1 - Maven/Spring Boot foundations: `IN PROGRESS` (opened 2026-10-28;
+JDK toolchain decided in `docs/decisions/0004-jdk-toolchain.md`; first task is
+the `discovery-server` scaffold). Phase 0 evidence below remains the gate.
 
 ## Last verified commit
 
@@ -72,11 +75,13 @@ no application feature exists and none is claimed.
 None for Phase 0. For Phase 1 the local default JDK being 25 (not 21) is the
 first decision to resolve; nothing else is blocked.
 
-## Next task (Phase 1 - `NOT STARTED`)
+## Phase 1 progress log
 
-1. Decide/arrange the pinned JDK 21 (install or toolchain) and record it.
-2. Scaffold apps one at a time, in order: `discovery-server`, `api-gateway`,
-   `catalog-service`, `warehouse-service` - each with a pinned pom (parent
-   3.5.16), its own Maven Wrapper, minimal Spring MVC boot plus Actuator, a
-   context test, and real `mvnw.cmd --batch-mode clean verify` evidence before
-   any `VERIFIED`.
+- 2026-10-28: JDK prerequisite resolved - the local default JDK stays 25,
+  the build target stays Java 21 via `--release 21` (ADR 0004).
+- Next: scaffold `discovery-server` (pinned parent 3.5.16 plus Spring Cloud
+  2025.0.3 BOM, own Maven Wrapper, minimal Eureka server, context test).
+  Until real `mvnw.cmd --batch-mode clean verify` evidence exists, its status
+  is `IMPLEMENTED - NOT VERIFIED`.
+- Then, one app per task with the same evidence rule: `api-gateway`,
+  `catalog-service`, `warehouse-service`.
