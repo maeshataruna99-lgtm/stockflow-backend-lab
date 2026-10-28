@@ -19,6 +19,14 @@ spring:
   flyway:
     # Migrates the primary DataSource above on every startup.
     locations: classpath:db/migration
+  jpa:
+    hibernate:
+      # Migrations own the schema; Hibernate only proves the mappings
+      # match it. Any entity drift from the Flyway schema fails startup.
+      ddl-auto: validate
+    # Entities are never serialized (API contract uses DTOs), so the
+    # lazy-loading-in-view antipattern has no reason to exist.
+    open-in-view: false
 
 eureka:
   client:

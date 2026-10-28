@@ -17,9 +17,11 @@ four-way psql isolation proof; Flyway V1+V2 success on both databases
 from version 0; deterministic seeds stable across restart). Two
 root-user items are deliberately deferred to Phase 5 per ADR 0003
 (nothing can seed or verify a user before auth exists) - carried as an
-obligation there, not as an open risk here. Next: Phase 3 - JPA
-persistence, /api/v1 endpoints and Testcontainers tests, one unit per
-commit. Phase 0 evidence below remains the gate.
+obligation there, not as an open risk here. Phase 3 - JPA persistence,
+/api/v1 endpoints and Testcontainers tests - is in progress, one unit
+per commit: unit 3.1 (JPA foundation in catalog-service) `VERIFIED`
+2026-10-28, units 3.2-3.4 pending. Phase 0 evidence below remains the
+gate.
 
 ## Last verified commit
 
@@ -258,3 +260,62 @@ exact toolchain (Maven 3.9.16 + Temurin JDK 21.0.12.1). Nothing else blocked.
   run 40648268572 (unit 2.1 commit `e5ecdee`) and run 40651087397
   (this commit) both SUCCESS, all four matrix jobs green in ~30 s,
   only the known informational Ubuntu 26 note.
+
+## Phase 3 progress log
+
+- 2026-10-28 16:10-16:45+07:00: unit 3.1 (JPA foundation in
+  catalog-service) `VERIFIED`. Added spring-boot-starter-data-jpa plus
+  the Testcontainers trio (spring-boot-testcontainers,
+  org.testcontainers:postgresql, org.testcontainers:junit-jupiter;
+  Testcontainers 1.21.4 resolved via the Boot BOM) to the catalog pom.
+  New JPA entities in dev.stockflow.catalog.domain
+  (Category/Unit/Product/Sku) mapping the Flyway V1 schema 1:1:
+  GenerationType.IDENTITY for GENERATED ALWAYS AS IDENTITY, Instant for
+  TIMESTAMPTZ, insertable=false/updatable=false for the database-managed
+  now() audit columns, lazy @ManyToOne for the real relations. Four
+  JpaRepository interfaces in dev.stockflow.catalog.repository. Main
+  application.yml gains spring.jpa.hibernate.ddl-auto=validate (migrations
+  own the schema; entity drift fails startup) and open-in-view=false
+  (DTO-only API contract, no lazy-in-view antipattern). Test
+  application.yml rewritten: eureka off, the previous
+  DataSource/Flyway autoconfiguration excludes removed - tests now run
+  against a real PostgreSQL 16.15-alpine container via @ServiceConnection,
+  so Flyway migrations and Hibernate validation execute for real in
+  tests and in CI. Two failures found and fixed by evidence, not
+  assumption: (1) AbstractCatalogIntegrationTest was package-private
+  while the repository test lives in a sibling package - compile error,
+  made the base public abstract; (2) the classic per-class container +
+  Spring context caching trap: with @Container per-class lifecycle the
+  first test class passed, then stopped its container while the cached
+  context still pointed at the dead port (observed: "Connection to
+  localhost:50297 refused", 2 tests errored in the second class, which
+  had started a NEW container on port 65334 that Spring never used).
+  Fix: singleton container pattern - static final container started in
+  the static initializer, deliberately NOT managed by @Testcontainers,
+  Ryuk reaps it at JVM exit. Proof the fix works: logs show exactly one
+  container start for the whole JVM and the repository test class then
+  runs in 1.7 s against the shared container. Second test trap
+  prevented: inside a @Transactional test, findById after save returns
+  the same managed instance from the L1 cache, so database-managed
+  now() timestamps would read as null - the roundtrip test calls
+  entityManager.flush() + clear() before re-reading so identity and
+  audit timestamps come from real re-selection. Build evidence:
+  catalog clean verify BUILD SUCCESS (4 tests, 0 failures/errors,
+  41.3 s); logs show the container starting, Flyway "Migrating schema
+  \"public\" to version \"1 - catalog schema\"" then "version \"2 -
+  catalog seed\"" on the empty container, and Hibernate validation
+  passing. Live startup path proof (the changed startup code, not just
+  tests): catalog started on profile dev against the compose postgres
+  with CATALOG_DB_PASSWORD from .env (never echoed); log shows
+  HikariPool connected to jdbc:postgresql://localhost:15432/catalogdb
+  (PostgreSQL 16.15), "Successfully validated 2 migrations", Tomcat on
+  8081, Started in 12.4 s; GET /actuator/health returned 200
+  {"status":"UP"}; afterwards the child java.exe (PID 8108) was killed
+  by PID - the trailing maven "Process terminated with exit code: -1"
+  is the kill confirmation, not a failure; eureka connection-refused
+  noise during the run is the known non-fatal partial-stack condition.
+  Honest notes: warehouse-service has no JPA yet (unit 3.3); no
+  repositories contain custom JPQL yet (unit 3.2 adds the documented
+  query); repository tests assert seed counts (2/2/2/2) against the
+  container where Flyway ran from version 0, not against the long-lived
+  compose volume.
