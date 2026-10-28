@@ -25,11 +25,13 @@ gate.
 
 ## Last verified commit
 
-`72bd778` (docs: record ci run evidence for phase 2 units 2.1 and 2.2)
-is the latest code state, verified green by Actions run 40651287248.
-Phase 2 code evidence chain: unit 2.1 commit `e5ecdee` (run
-40648268572), unit 2.2 commit `0c350e4` (run 40651087397); live psql
-and restart evidence 14:05-14:35+07:00 below.
+`78569f3` (feat(catalog): jpa foundation with testcontainers integration
+tests) is the latest code state, verified green by Actions run
+40665107969 (all four matrix jobs SUCCESS; catalog job ran 4 tests,
+1+3, with the Testcontainers container and Flyway migration executing
+on the runner). Phase 2 code evidence chain: unit 2.1 commit `e5ecdee`
+(run 40648268572), unit 2.2 commit `0c350e4` (run 40651087397); live
+psql and restart evidence 14:05-14:35+07:00 below.
 
 ## Phase 0 task status (2026-10-28)
 
@@ -318,4 +320,8 @@ exact toolchain (Maven 3.9.16 + Temurin JDK 21.0.12.1). Nothing else blocked.
   repositories contain custom JPQL yet (unit 3.2 adds the documented
   query); repository tests assert seed counts (2/2/2/2) against the
   container where Flyway ran from version 0, not against the long-lived
-  compose volume.
+  compose volume. CI: run 40665107969 SUCCESS on commit `78569f3` -
+  all four matrix jobs green; the catalog job's surefire summary (Tests
+  run: 4, Failures: 0, Errors: 0) with a 12.9 s first test class proves
+  the container started and Flyway migrated on the ubuntu runner, so
+  the real-database tests are enforced in CI, not only locally.
