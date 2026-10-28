@@ -7,18 +7,18 @@ that actually ran. A checkbox is tracking, not evidence.
 
 Phase 0 - repository and design baseline: `VERIFIED` (committed as
 `24addaa`).
-Phase 1 - Maven/Spring Boot foundations: `IN PROGRESS` (JDK toolchain
-decided in ADR 0004). All four apps verified: `discovery-server` (11:50),
-`api-gateway` (11:55, re-verified 11:58 after the ADR 0005 starter switch),
-`catalog-service` (12:00), `warehouse-service` (12:02) - evidence below.
-Remaining Phase 1 deliverables: unit-test baseline, CI workflow.
+Phase 1 - Maven/Spring Boot foundations: `VERIFIED` (2026-10-28, gate
+closed - evidence below). Next: Phase 2 - PostgreSQL, Flyway and seed data
+(compose postgres service with two logical databases and least-privilege
+roles per ADR 0002, flyway migrations per service, deterministic seeds).
 Phase 0 evidence below remains the gate.
 
 ## Last verified commit
 
-The warehouse-service scaffold commit `8bbc976` is the latest verified
-state; its verify evidence is recorded in the `docs:` commit immediately
-following it.
+`2e43056` (ci: pin actions to current maintained versions) is the latest
+code state, verified green by Actions run 40643409693. Local app evidence:
+four builds verified 11:50-12:02 and live start-and-health checks passed
+13:16-13:21+07:00.
 
 ## Phase 0 task status (2026-10-28)
 
@@ -151,3 +151,18 @@ exact toolchain (Maven 3.9.16 + Temurin JDK 21.0.12.1). Nothing else blocked.
   2/4); the first registry read misreported empty due to a PowerShell
   content-type quirk, the re-read returned the raw UP_3_ registry; all
   four java processes were stopped afterwards.
+- 2026-10-28 13:13-13:24+07:00: CI workflow landed and verified on real
+  GitHub Actions runs. Run 1 (40642546618, commit `ed956ef`) FAILED in
+  12 s: every matrix job exited 126 with `./mvnw: Permission denied` -
+  the wrapper scripts were committed from Windows without the exec bit;
+  fixed via `git update-index --chmod=+x` on all four mvnw scripts
+  (commit `d9ef367`). Run 2 (40642734252) SUCCESS: all four jobs green
+  (discovery 31 s, api-gateway 36 s, catalog 28 s, warehouse 26 s) on
+  ubuntu-latest with JAVA_HOME Temurin 21.0.12-1; annotations reported
+  actions/checkout@v4 and setup-java@v4 deprecations. Actions were bumped
+  to the latest official releases (checkout v7.0.1, setup-java v6.1.0,
+  commit `2e43056`). Run 3 (40643409693) SUCCESS: all four jobs green in
+  30-32 s and the actions deprecation annotations are gone; only the
+  informational Ubuntu 26 migration note remains. Run 1's failure is
+  kept as the proof that CI fails on a failed build, per the ROADMAP
+  requirement. Phase 1 gate CLOSED.

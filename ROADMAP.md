@@ -252,17 +252,17 @@ or is claimed.
 
 ### Phase 1 --- Maven/Spring Boot foundations
 
-Status: IN PROGRESS (2026-10-28). Toolchain measured: Maven 3.9.16 runs on
-Temurin JDK 21.0.12.1 (JAVA_HOME); the build target stays Java 21 via
-`--release 21` - decision (corrected after measurement) in
-`docs/decisions/0004-jdk-toolchain.md`. Apps are scaffolded one at a time,
-each with its own real `mvnw verify` evidence before VERIFIED.
-Progress: all four app scaffolds VERIFIED 2026-10-28 - discovery-server
-11:50, api-gateway 11:55 (re-verified 11:58 after the ADR 0005 starter
-switch), catalog-service 12:00, warehouse-service 12:02+07:00 (each:
-`mvnw --batch-mode clean verify` exit 0; one context test on
-JDK 21.0.12.1; details in `docs/STATUS.md`). Remaining here: unit-test
-baseline, CI workflow.
+Status: VERIFIED (2026-10-28, gate closed; evidence in `docs/STATUS.md`).
+Toolchain: Maven 3.9.16 on Temurin JDK 21.0.12.1 locally; CI runners on
+Temurin 21 (ADR 0004); the build target stays Java 21 via `--release 21`.
+All deliverables and acceptance criteria are ticked below against real
+commands: four independently verified app builds (local Windows runs plus
+GitHub Actions runs), wrappers pinned 3.9.16, MVC+actuator baseline,
+configuration profiles (dev live-verified on all four apps; demo/prod
+implemented and awaiting Phase 2/4 use), unit-test baseline, and a real
+CI run history that also proves failure detection. Carried-forward notes:
+LoadBalancer default-cache and Mockito dynamic-agent warnings (non-fatal);
+the ubuntu-latest label migrates to Ubuntu 26 (informational).
 
 **Deliverables**
 - [x] Independently buildable applications: gateway, discovery server,
@@ -277,7 +277,9 @@ baseline, CI workflow.
       stay unexercised until Phase 2/4 gives them real use).
 - [x] Unit-test baseline (one context test per app, 4/4 green). Deeper
       suites arrive with Phase 2-3 features.
-- [ ] CI workflow (needs a GitHub remote and a recorded Actions run).
+- [x] CI workflow (`.github/workflows/ci.yml`, matrix job per app; run
+      history recorded in docs/STATUS.md - one failed run proving failure
+      detection, two green runs).
 
 **Acceptance criteria**
 - [x] Each app starts locally with documented config (dev profile live on
@@ -294,8 +296,9 @@ baseline, CI workflow.
 **Verification commands**
 - [x] Windows: `mvnw.cmd --batch-mode clean verify` inside each app (all
       four exit 0 on 2026-10-28; `docs/STATUS.md`).
-- [ ] Run the GitHub Actions workflow and record its actual result; local
-      success alone does not prove remote CI succeeded.
+- [x] Run the GitHub Actions workflow and record its actual result -
+      run 40642546618 failure (permission denied, exit 126) and green runs
+      40642734252 / 40643409693 recorded in docs/STATUS.md.
 - Linux/macOS `./mvnw` stays for CI/containers.
 
 ### Phase 2 --- PostgreSQL, Flyway and seed data
