@@ -26,13 +26,14 @@ gate.
 
 ## Last verified commit
 
-`78569f3` (feat(catalog): jpa foundation with testcontainers integration
-tests) is the latest code state, verified green by Actions run
-40665107969 (all four matrix jobs SUCCESS; catalog job ran 4 tests,
-1+3, with the Testcontainers container and Flyway migration executing
-on the runner). Phase 2 code evidence chain: unit 2.1 commit `e5ecdee`
-(run 40648268572), unit 2.2 commit `0c350e4` (run 40651087397); live
-psql and restart evidence 14:05-14:35+07:00 below.
+`85a33d3` (feat(catalog): products and categories api with dto
+validation and jpql search) is the latest code state, verified green by
+Actions run 40667190280 (all four matrix jobs SUCCESS; the catalog job
+ran 17 tests, 1+3+13, against the container on the runner). Earlier
+chain: unit 3.1 commit `78569f3` (run 40665107969), docs commit
+`cadfc6d` (run 40665351249); Phase 2: unit 2.1 commit `e5ecdee` (run
+40648268572), unit 2.2 commit `0c350e4` (run 40651087397); live psql
+and restart evidence 14:05-14:35+07:00 below.
 
 ## Phase 0 task status (2026-10-28)
 
@@ -391,4 +392,11 @@ exact toolchain (Maven 3.9.16 + Temurin JDK 21.0.12.1). Nothing else blocked.
   seed row 2's updated_at advanced - dev demo data, never part of test
   assertions (tests assert on their own fixtures); warehouse endpoints
   wait for unit 3.3; OpenAPI annotations/springdoc wait for unit 3.4,
-  so "OpenAPI reflects actual behavior" is not yet claimed.
+  so "OpenAPI reflects actual behavior" is not yet claimed. CI: run
+  40667190280 SUCCESS on commit `85a33d3` - all four matrix jobs green,
+  the catalog job ran 17 tests (1+3+13) with the container on the
+  runner. Process note recorded: immediately after the push,
+  "gh run list --limit 1" returned the still-newest registered run,
+  which belonged to the previous docs commit (40665351249, catalog 4
+  tests) - watching it reported success for the WRONG commit; always
+  match the run to the commit's headSha before claiming CI evidence.
