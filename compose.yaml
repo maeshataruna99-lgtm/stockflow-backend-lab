@@ -1,23 +1,40 @@
-# Phase 2 scope: postgres only. The application services join the core
-# stack in Phase 4; redis arrives with the caching stack (Phase 6), per
-# docs/architecture/system-overview.md.
+# Core stack (Phase 4): discovery, gateway, catalog, warehouse,
+# postgres, redis - one internal Docker network, named volumes for the
+# stateful services. Per docs/architecture/system-overview.md redis is
+# part of the core compose from Phase 4 even though nothing uses it
+# until the caching stack (Phase 6); it is included here so the core
+# stack matches the ROADMAP Phase 4 deliverable and is health-checked
+# from day one.
 #
-# Host publishing: 127.0.0.1 only, and only for Phase 2 - the Java services
-# still run on the host (mvnw) and must reach the database. Phase 4 moves
-# the services into the Docker network and removes host publishing so
-# postgres ends up internal-only, as the system overview plans.
+# Host publishing policy (ROADMAP Phase 4: only required host ports):
+# - gateway 8080: the single public entry point of the system.
+# - discovery 8761: the operator-facing Eureka dashboard. It is never
+#   routed through the gateway (initial-api-outline.md), so its only
+#   consumer is a human operator - that makes the localhost publish a
+#   required host port in this lab.
+# - catalog, warehouse, postgres and redis are internal-only. Host-side
+#   checks go through `docker compose exec` (busybox wget ships in the
+#   runtime images) or the gateway; a temporary override file can
+#   publish more ports for debugging but is not part of the default
+#   stack.
+# postgres therefore loses its Phase 2 host publish (127.0.0.1:15432)
+# in Phase 4, as planned in the Phase 2 comment below and the system
+# overview. Host-side development runs (mvnw) that still need a
+# published postgres are documented in README.md with a one-line
+# override, not enabled by default.
 #
-# Host port: 15432, not 5432. This machine runs a native PostgreSQL 18
-# Windows service (postgresql-x64-18) that already holds 5432; verified
-# 2026-10-28 (netstat PID 6712 postgres.exe). The compose port is the host
-# side only - inside the stockflow network postgres stays on 5432, exactly
-# as the system overview says. Override with POSTGRES_PORT in .env.
+# Inside the stockflow network every service keeps its standard port
+# (postgres 5432, eureka 8761, services 8080-8082), and services reach
+# each other by service DNS name - never localhost (which inside a
+# container would mean the container itself).
 #
 # Credentials come from .env (copy .env.example and fill in per-machine
 # values). The :? checks make compose fail fast when a password is unset,
 # so the stack can never start with a known default. Never commit .env.
 #
-# Image pinned per ADR 0001 (official Docker Hub tag, checked 2026-10-28).
+# Image pinned per ADR 0001 (official Docker Hub tags, checked
+# 2026-10-28). Application images are built from the pinned-builder
+# Dockerfiles in apps/ (Maven 3.9.16 + Temurin 21.0.12.1, non-root).
 
 services:
   postgres:
@@ -32,8 +49,8 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d:ro
-    ports:
-      - "127.0.0.1:${POSTGRES_PORT:-15432}:5432"
+    # Phase 4: no host ports. postgres is internal-only; the Java
+    # services reach it as jdbc:postgresql://postgres:5432/...
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d catalogdb && pg_isready -U postgres -d warehousedb"]
       interval: 5s
@@ -44,8 +61,114 @@ services:
       - stockflow
     restart: unless-stopped
 
+  redis:
+    image: redis:7.4.12-alpine
+    container_name: stockflow-redis
+    # Idle until the caching stack (Phase 6); health-checked from now
+    # so the core stack is verifiable as a whole.
+    command: ["redis-server", "--appendonly", "no"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    networks:
+      - stockflow
+    restart: unless-stopped
+
+  discovery:
+    build: ./apps/discovery-server
+    image: stockflow/discovery-server:0.0.1-SNAPSHOT
+    container_name: stockflow-discovery
+    ports:
+      # operator-facing Eureka dashboard, localhost only
+      - "127.0.0.1:8761:8761"
+    healthcheck:
+      # busybox wget ships in the Temurin Alpine runtime image
+      test: ["CMD-SHELL", "wget -q http://localhost:8761/actuator/health -O /dev/null"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+    networks:
+      - stockflow
+    restart: unless-stopped
+
+  catalog:
+    build: ./apps/catalog-service
+    image: stockflow/catalog-service:0.0.1-SNAPSHOT
+    container_name: stockflow-catalog
+    environment:
+      # internal DNS, never localhost: postgres is a different container
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/catalogdb
+      CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?set CATALOG_DB_PASSWORD in .env}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
+    depends_on:
+      postgres:
+        condition: service_healthy
+      discovery:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q http://localhost:8081/actuator/health -O /dev/null"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+    networks:
+      - stockflow
+    restart: unless-stopped
+
+  warehouse:
+    build: ./apps/warehouse-service
+    image: stockflow/warehouse-service:0.0.1-SNAPSHOT
+    container_name: stockflow-warehouse
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/warehousedb
+      WAREHOUSE_DB_PASSWORD: ${WAREHOUSE_DB_PASSWORD:?set WAREHOUSE_DB_PASSWORD in .env}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
+    depends_on:
+      postgres:
+        condition: service_healthy
+      discovery:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q http://localhost:8082/actuator/health -O /dev/null"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+    networks:
+      - stockflow
+    restart: unless-stopped
+
+  gateway:
+    build: ./apps/api-gateway
+    image: stockflow/api-gateway:0.0.1-SNAPSHOT
+    container_name: stockflow-gateway
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
+    depends_on:
+      discovery:
+        condition: service_healthy
+    ports:
+      # the single public entry point, localhost only
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q http://localhost:8080/actuator/health -O /dev/null"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+    networks:
+      - stockflow
+    restart: unless-stopped
+
 networks:
   stockflow:
 
 volumes:
   postgres_data:
+  redis_data:

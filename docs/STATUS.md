@@ -548,6 +548,54 @@ exact toolchain (Maven 3.9.16 + Temurin JDK 21.0.12.1). Nothing else blocked.
   (Dockerfiles do not affect the mvnw CI path; run recorded to keep the
   chain continuous).
 
+- 2026-10-28 17:45-18:10+07:00: unit 4.2 (core compose + service
+  discovery) `VERIFIED`. compose.yaml is now the full core stack:
+  discovery, gateway, catalog, warehouse, postgres, redis on one
+  internal `stockflow` network with named volumes (postgres_data,
+  redis_data). Host publishing policy (ROADMAP "only required host
+  ports"): gateway 8080 (the single public entry point) and discovery
+  8761 (operator-facing Eureka dashboard, never routed through the
+  gateway) on 127.0.0.1 only; catalog, warehouse, postgres and redis
+  are internal-only - postgres lost its Phase 2 temporary publish
+  (127.0.0.1:15432) exactly as the Phase 2 compose comment planned.
+  Redis (redis:7.4.12-alpine per ADR 0001) is included per the ROADMAP
+  Phase 4 deliverable although nothing uses it until Phase 6; it is
+  health-checked from day one. Application wiring is env-var based in
+  compose (no new Spring profile files): SPRING_DATASOURCE_URL points
+  at jdbc:postgresql://postgres:5432/... and
+  EUREKA_CLIENT_SERVICEURL_DEFAULTZONE at http://discovery:8761/eureka/
+  - internal service DNS names, never localhost. depends_on with
+  service_healthy makes postgres/discovery gate the app containers;
+  every java container gets a busybox-wget healthcheck against its own
+  actuator health endpoint (wget ships in the Temurin Alpine runtime
+  image). Verification per ROADMAP: `docker compose config --quiet`
+  exit 0; `docker compose up --build -d` exit 0 (rebuilt from source
+  through the Dockerfiles); `docker compose ps` shows all SIX
+  containers healthy ~40-45 s after start; Eureka REST
+  (127.0.0.1:8761/eureka/apps) lists API-GATEWAY, CATALOG-SERVICE and
+  WAREHOUSE-SERVICE all status=UP; service logs prove internal DNS
+  (Flyway connected to jdbc:postgresql://postgres:5432/{catalogdb,
+  warehousedb} - no host-only URL anywhere); each java service's
+  health endpoint called from inside the network via
+  `docker compose exec ... wget` (all {"status":"UP"}), postgres
+  pg_isready accepting, redis PONG. Restart behavior: `docker compose
+  restart warehouse` -> re-registered in Eureka as UP after ~40 s and
+  health UP again. Volume preservation: `docker compose down` exit 0
+  left both named volumes in place (docker volume ls), and a following
+  `docker compose up -d` brought all six containers healthy again with
+  the data intact - catalogdb still holds seed rows SPK-X1/DSK-MAT and
+  the demo row LIVE-3.2 created in unit 3.2, proving down does not
+  touch volume data. Honest notes: gateway routes nothing yet (Phase
+  5) - its 8080 health endpoint is the only exercised surface;
+  Eureka-registered instance hostnames are container IDs (resolvable
+  inside the network; gateway-based routing in Phase 5 will exercise
+  that path for real); host-side mvnw development runs lose direct
+  postgres access now that the publish is gone - README (unit 4.3)
+  documents an optional one-line override for that case; destructive
+  cleanup (down -v) is deliberately NOT documented as part of the
+  normal workflow and gets its own warning section in unit 4.3. CI
+  evidence: recorded in the follow-up docs commit.
+
 ## Phase 3 gate review (2026-10-28, closing Phase 3)
 
 Every ROADMAP Phase 3 deliverable and acceptance criterion, checked
