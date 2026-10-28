@@ -226,22 +226,29 @@ consistency review across documents, ignore-rule checks, and
 `git status --short` clean of unintended files. No application feature exists
 or is claimed.
 
-**Deliverables** - `README.md` with project intent and non-goals. -
-`docs/architecture/system-overview.md`. -
-`docs/decisions/0001-version-baseline.md`. - `docs/STATUS.md`. -
-`ROADMAP.md`. - `.gitignore`, `.env.example`, initial license
-decision. - Service ownership and API contract outline.
+**Deliverables**
+- [x] `README.md` with project intent and non-goals.
+- [x] `docs/architecture/system-overview.md`.
+- [x] `docs/decisions/0001-version-baseline.md`.
+- [x] `docs/STATUS.md`.
+- [x] `ROADMAP.md`.
+- [x] `.gitignore`, `.env.example`, initial license decision (MIT).
+- [x] Service ownership and API contract outline.
 
-**Acceptance criteria** - Service boundaries and data ownership are
-explicit. - Java/Spring Boot/Spring Cloud versions are compatible and
-pinned. - Root user and secret-handling policy is documented. - All
-future phases have acceptance gates. - No application feature is claimed
-implemented yet.
+**Acceptance criteria**
+- [x] Service boundaries and data ownership are explicit.
+- [x] Java/Spring Boot/Spring Cloud versions are compatible and pinned.
+- [x] Root user and secret-handling policy is documented.
+- [x] All future phases have acceptance gates.
+- [x] No application feature is claimed implemented yet.
 
-**Verification** - Review all docs for contradictory versions, service
-names, ports, and assumptions. - Check `.gitignore` excludes `.env`,
-build outputs, IDE files, local DB dumps and credentials. -
-`git status --short` contains only intended files.
+**Verification**
+- [x] Review all docs for contradictory versions, service names, ports,
+      and assumptions (2026-10-28 consistency greps recorded in
+      `docs/STATUS.md`).
+- [x] Check `.gitignore` excludes `.env`, build outputs, IDE files, local
+      DB dumps and credentials (`git check-ignore -v` exit 0 recorded).
+- [x] `git status --short` contains only intended files.
 
 ### Phase 1 --- Maven/Spring Boot foundations
 
@@ -257,22 +264,37 @@ switch), catalog-service 12:00, warehouse-service 12:02+07:00 (each:
 JDK 21.0.12.1; details in `docs/STATUS.md`). Remaining here: unit-test
 baseline, CI workflow.
 
-**Deliverables** - Independently buildable applications: gateway,
-discovery server, catalog, warehouse. - Maven Wrapper for every
-application. - Spring MVC baseline, configuration profiles, Actuator. -
-Unit-test baseline and CI workflow.
+**Deliverables**
+- [x] Independently buildable applications: gateway, discovery server,
+      catalog, warehouse (each `mvnw --batch-mode clean verify` exit 0 on
+      2026-10-28; evidence in `docs/STATUS.md`).
+- [x] Maven Wrapper for every application (distribution pinned 3.9.16).
+- [x] Spring MVC baseline and Actuator (services are MVC; the gateway is
+      reactive by decision, ADR 0005; actuator health exposed in all four).
+- [ ] Configuration profiles (dev/demo/prod files not yet written;
+      scheduled with Phase 2 configuration work).
+- [x] Unit-test baseline (one context test per app, 4/4 green). Deeper
+      suites arrive with Phase 2-3 features.
+- [ ] CI workflow (needs a GitHub remote and a recorded Actions run).
 
-**Acceptance criteria** - Each app starts locally with documented
-config. - Each `./mvnw clean verify` succeeds independently. -
-Application context tests pass. - Java and dependency versions are
-pinned. - CI executes build/tests for every app and fails on a failed
-build/test.
+**Acceptance criteria**
+- [ ] Each app starts locally with documented config - context tests load
+      the context in a mock environment but no real start and
+      `/actuator/health` call has been recorded yet; owed before the gate.
+- [x] Each `./mvnw clean verify` succeeds independently (2026-10-28,
+      evidence in `docs/STATUS.md`).
+- [x] Application context tests pass (1 per app, 4 total).
+- [x] Java and dependency versions are pinned (parent 3.5.16, BOM
+      2025.0.3, Java 21, wrapper 3.9.16).
+- [ ] CI executes build/tests for every app and fails on a failed
+      build/test - needs a remote and a recorded run.
 
-**Verification commands** - Linux/macOS:
-`./mvnw --batch-mode clean verify` inside each app. - Windows:
-`mvnw.cmd --batch-mode clean verify`. - Run the GitHub Actions workflow
-and record its actual result; local success alone does not prove remote
-CI succeeded.
+**Verification commands**
+- [x] Windows: `mvnw.cmd --batch-mode clean verify` inside each app (all
+      four exit 0 on 2026-10-28; `docs/STATUS.md`).
+- [ ] Run the GitHub Actions workflow and record its actual result; local
+      success alone does not prove remote CI succeeded.
+- Linux/macOS `./mvnw` stays for CI/containers.
 
 ### Phase 2 --- PostgreSQL, Flyway and seed data
 

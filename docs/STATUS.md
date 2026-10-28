@@ -129,3 +129,10 @@ exact toolchain (Maven 3.9.16 + Temurin JDK 21.0.12.1). Nothing else blocked.
   scaffolds are now verified locally; CI evidence remains open.
 - Then, one deliverable per task with the same evidence rule: unit-test
   baseline, CI workflow.
+- 2026-10-28 12:05+07:00: checkpoint at the user's request - ROADMAP
+  Phase 0 and Phase 1 ticked against recorded evidence only. Ticked: all
+  Phase 0 items; the four independently verified app builds, wrappers,
+  MVC+actuator baseline and the unit-test baseline. Still open before the
+  Phase 1 gate: an explicit start-and-health check per app, configuration
+  profiles, and the CI workflow with a recorded Actions run (needs a
+  remote; none configured yet).
