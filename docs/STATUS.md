@@ -8,14 +8,15 @@ that actually ran. A checkbox is tracking, not evidence.
 Phase 0 - repository and design baseline: `VERIFIED` (committed as
 `24addaa`).
 Phase 1 - Maven/Spring Boot foundations: `IN PROGRESS` (JDK toolchain
-decided in ADR 0004). First app `discovery-server` scaffold `VERIFIED`
-(2026-10-28 11:50+07:00, evidence below); next in order: `api-gateway`.
-Phase 0 evidence below remains the gate.
+decided in ADR 0004). Apps verified so far: `discovery-server` (11:50),
+`api-gateway` (11:55) - evidence below. Next in order: `catalog-service`.
+The gateway build surfaced a starter deprecation; the follow-up switch is
+recorded in ADR 0005. Phase 0 evidence below remains the gate.
 
 ## Last verified commit
 
-None. This repository has no commits yet and none were requested; all
-recorded content is working tree (untracked) on branch `main`.
+The api-gateway scaffold commit `5b0294a` is the latest verified state; its
+verify evidence is recorded in the `docs:` commit immediately following it.
 
 ## Phase 0 task status (2026-10-28)
 
@@ -90,5 +91,17 @@ exact toolchain (Maven 3.9.16 + Temurin JDK 21.0.12.1). Nothing else blocked.
   Honest notes: no Bean Validation provider on the classpath yet (expected
   until services add validation), plus non-fatal Mockito dynamic-agent and
   Spring Cloud LoadBalancer default-cache warnings.
-- Then, one app per task with the same evidence rule: `api-gateway`,
-  `catalog-service`, `warehouse-service`.
+- 2026-10-28 11:55+07:00: `api-gateway` scaffold `VERIFIED` - command
+  `.\mvnw.cmd --batch-mode clean verify` in `apps/api-gateway`, exit 0,
+  BUILD SUCCESS, total time 48.204 s; tests run 1, failures 0, errors 0,
+  skipped 0 (`ApiGatewayApplicationTests.contextLoads`); the test JVM ran
+  Java 21.0.12.1 and javac compiled with `release 21`; jar repackaged.
+  Honest finding: the build printed two explicit deprecation warnings from
+  the starter itself - `spring-cloud-starter-gateway` and
+  `spring-cloud-gateway-server` will be removed in the next major release,
+  and the warning recommends `spring-cloud-starter-gateway-server-webflux`.
+  Maven Central metadata confirms that artifact exists at 4.3.5, the same
+  version the deprecated starter resolved to inside the pinned BOM. The
+  switch is recorded in ADR 0005 and gets its own verify evidence next.
+- Then, one app per task with the same evidence rule: `catalog-service`,
+  `warehouse-service`.
