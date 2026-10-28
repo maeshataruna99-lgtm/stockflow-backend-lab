@@ -37,10 +37,10 @@ no application feature exists and none is claimed.
 - `Get-Date -Format o` -> `2026-10-28T11:43:16.0904020+07:00` (verification
   timestamp).
 - `git init -b main` -> created the repository (exit 0, earlier this session).
-- `java -version` -> OpenJDK `25.0.4.1` LTS (Temurin) as system default.
-  Note: the default is Java 25, not 21. Phase 1 needs an explicit decision: a
-  pinned JDK 21 install/toolchain, or building with `--release 21` on 25 -
-  that choice gets recorded before Phase 1 claims anything.
+- `java -version` -> OpenJDK `25.0.4.1` LTS (Temurin) as the shell default.
+  Follow-up measurement: `mvn -version` -> Apache Maven 3.9.16 running on
+  Temurin JDK 21.0.12.1 (JAVA_HOME). A JDK 21 IS installed; builds use it.
+  ADR 0004 corrected accordingly (draft claimed otherwise before measuring).
 - `git status --short` -> `?? .env.example`, `?? .gitignore`, `?? LICENSE`,
   `?? README.md`, `?? ROADMAP.md`, `?? docs/`. Only intended Phase 0 files;
   `AGENT_RULES.md`, `JAVA_RULES.md` and `AI_AGENT_HANDOFF_PROMPT.md` are
@@ -72,13 +72,14 @@ no application feature exists and none is claimed.
 
 ## Blockers
 
-None for Phase 0. For Phase 1 the local default JDK being 25 (not 21) is the
-first decision to resolve; nothing else is blocked.
+None. The JDK 21 question closed after measuring Maven; ADR 0004 records the
+exact toolchain (Maven 3.9.16 + Temurin JDK 21.0.12.1). Nothing else blocked.
 
 ## Phase 1 progress log
 
-- 2026-10-28: JDK prerequisite resolved - the local default JDK stays 25,
-  the build target stays Java 21 via `--release 21` (ADR 0004).
+- 2026-10-28: JDK prerequisite closed by measurement - Maven 3.9.16 runs on
+  Temurin JDK 21.0.12.1 (JAVA_HOME); build target stays Java 21 via
+  `--release 21` (ADR 0004, corrected after the measurement).
 - Next: scaffold `discovery-server` (pinned parent 3.5.16 plus Spring Cloud
   2025.0.3 BOM, own Maven Wrapper, minimal Eureka server, context test).
   Until real `mvnw.cmd --batch-mode clean verify` evidence exists, its status

@@ -245,9 +245,10 @@ build outputs, IDE files, local DB dumps and credentials. -
 
 ### Phase 1 --- Maven/Spring Boot foundations
 
-Status: IN PROGRESS (2026-10-28). JDK prerequisite resolved: the build target
-stays Java 21 via `--release 21` while the local default JDK is 25 - decision
-in `docs/decisions/0004-jdk-toolchain.md`. Apps are scaffolded one at a time,
+Status: IN PROGRESS (2026-10-28). Toolchain measured: Maven 3.9.16 runs on
+Temurin JDK 21.0.12.1 (JAVA_HOME); the build target stays Java 21 via
+`--release 21` - decision (corrected after measurement) in
+`docs/decisions/0004-jdk-toolchain.md`. Apps are scaffolded one at a time,
 each with its own real `mvnw verify` evidence before VERIFIED.
 
 **Deliverables** - Independently buildable applications: gateway,
