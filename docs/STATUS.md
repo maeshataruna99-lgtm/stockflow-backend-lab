@@ -26,12 +26,13 @@ pending. Phase 0 evidence below remains the gate.
 
 ## Last verified commit
 
-`85a33d3` (feat(catalog): products and categories api with dto
-validation and jpql search) is the latest code state, verified green by
-Actions run 40667190280 (all four matrix jobs SUCCESS; the catalog job
-ran 17 tests, 1+3+13, against the container on the runner). Earlier
-chain: unit 3.1 commit `78569f3` (run 40665107969), docs commit
-`cadfc6d` (run 40665351249); Phase 2: unit 2.1 commit `e5ecdee` (run
+`30648a8` (feat(warehouse): warehouses and locations api with dto
+validation) is the latest code state, verified green by Actions run
+40668312313 (all four matrix jobs SUCCESS; the warehouse job ran 15
+tests, 1+14, against the container on the runner). Earlier
+chain: unit 3.2 commit `85a33d3` (run 40667190280), docs commit
+`d55504e`; unit 3.1 commit `78569f3` (run 40665107969), docs commit
+`cadfc6d`; Phase 2: unit 2.1 commit `e5ecdee` (run
 40648268572), unit 2.2 commit `0c350e4` (run 40651087397); live psql
 and restart evidence 14:05-14:35+07:00 below.
 
@@ -446,5 +447,10 @@ exact toolchain (Maven 3.9.16 + Temurin JDK 21.0.12.1). Nothing else blocked.
   part of test assertions; Location headers are relative URIs (same as
   catalog); eureka connection-refused noise is the known non-fatal
   partial-stack condition; OpenAPI annotations wait for unit 3.4.
-  CI evidence: recorded in the follow-up docs commit (run id added
-  there, matched to this commit's headSha).
+  CI evidence: run 40668312313 SUCCESS on commit `30648a8`
+  (headSha-matched before watching, per the unit 3.2 process note) -
+  all four matrix jobs green; the warehouse job's surefire summary
+  (Tests run: 15, Failures: 0, Errors: 0, the API class 14 in 2.0 s)
+  proves the container started and Flyway migrated on the ubuntu
+  runner, so the real-database warehouse tests are enforced in CI, not
+  only locally.
