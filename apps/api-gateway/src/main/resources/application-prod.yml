@@ -1,0 +1,22 @@
+# Phase 1 profile: prod.
+# Production profile never seeds a demo root account (ADR 0003).
+# Database and demo authentication are not configured in Phase 1; they arrive in Phase 2/5.
+# Eureka address must be supplied by the deployment via EUREKA_DEFAULT_ZONE; localhost is only the fallback for a single-machine check, not a production deployment claim.
+# Gateway routes: not configured in Phase 1; routing arrives in Phase 5.
+
+eureka:
+  client:
+    enabled: true
+    service-url:
+      defaultZone: ${EUREKA_DEFAULT_ZONE:http://localhost:8761/eureka/}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+logging:
+  level:
+    root: WARN
+    dev.stockflow: INFO

@@ -1,0 +1,22 @@
+# Phase 1 profile: dev (local development).
+# Only overrides what differs from application.yml.
+# Database: not configured in Phase 1; PostgreSQL/Flyway arrive in Phase 2.
+# Gateway routes: not configured in Phase 1; routing arrives in Phase 5.
+# Demo root account: not implemented in Phase 1 (ADR 0003); this profile seeds nothing.
+
+eureka:
+  client:
+    enabled: true
+    service-url:
+      defaultZone: ${EUREKA_DEFAULT_ZONE:http://localhost:8761/eureka/}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    root: INFO
+    dev.stockflow: INFO

@@ -1,0 +1,19 @@
+# Phase 1 profile: prod.
+# Production profile never seeds a demo root account (ADR 0003).
+# Discovery server does not register with itself.
+
+eureka:
+  client:
+    register-with-eureka: false
+    fetch-registry: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+logging:
+  level:
+    root: WARN
+    dev.stockflow: INFO
