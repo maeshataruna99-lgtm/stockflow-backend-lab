@@ -103,5 +103,12 @@ exact toolchain (Maven 3.9.16 + Temurin JDK 21.0.12.1). Nothing else blocked.
   Maven Central metadata confirms that artifact exists at 4.3.5, the same
   version the deprecated starter resolved to inside the pinned BOM. The
   switch is recorded in ADR 0005 and gets its own verify evidence next.
+- 2026-10-28 11:58+07:00: switched `api-gateway` to
+  `spring-cloud-starter-gateway-server-webflux` (ADR 0005) and re-ran
+  `.\mvnw.cmd --batch-mode clean verify`, exit 0, BUILD SUCCESS, total time
+  25.128 s; tests run 1, failures 0, errors 0, skipped 0; the test JVM ran
+  Java 21.0.12.1 and javac compiled with `release 21`; both gateway
+  deprecation warnings are gone in this run. Remaining non-fatal notes:
+  LoadBalancer default-cache and Mockito dynamic-agent warnings.
 - Then, one app per task with the same evidence rule: `catalog-service`,
   `warehouse-service`.

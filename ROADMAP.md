@@ -252,10 +252,10 @@ Temurin JDK 21.0.12.1 (JAVA_HOME); the build target stays Java 21 via
 each with its own real `mvnw verify` evidence before VERIFIED.
 Progress: `discovery-server` and `api-gateway` scaffolds VERIFIED 2026-10-28
 (11:50 / 11:55+07:00; `mvnw --batch-mode clean verify` exit 0; one context
-test each on JDK 21.0.12.1; details in `docs/STATUS.md`). The gateway build
-surfaced a deprecated starter; the non-deprecated webflux starter switch is
-recorded in ADR 0005. Remaining here: catalog-service, warehouse-service,
-unit-test baseline, CI workflow.
+test each on JDK 21.0.12.1; details in `docs/STATUS.md`). The deprecated
+gateway starter was switched (ADR 0005) and re-verified 11:58+07:00.
+Remaining here: catalog-service, warehouse-service, unit-test baseline,
+CI workflow.
 
 **Deliverables** - Independently buildable applications: gateway,
 discovery server, catalog, warehouse. - Maven Wrapper for every
