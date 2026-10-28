@@ -33,21 +33,28 @@ warehouse tests green locally and in CI; springdoc 2.10.0 serves
 actual behavior. Two items are deliberately deferred with their owning
 phases: production-profile root seeding (Phase 5, ADR 0003) and
 production-profile verification (Phase 4). Phase 4 - Docker Compose
-core and service discovery - is next. Phase 0 evidence below remains
-the gate.
+core and service discovery: `VERIFIED` 2026-10-28, gate closed -
+multi-stage non-root Dockerfiles (unit 4.1), full six-service compose
+stack with internal network, Eureka registration, health checks,
+restart + volume preservation evidence (unit 4.2), and setup
+documentation with an opt-in hostdev override (unit 4.3); gate review
+below. Phase 5 - API gateway and its ten use cases - is next. Phase 0
+evidence below remains the gate.
 
 ## Last verified commit
 
-`f642b38` (feat(api): springdoc openapi docs reflecting actual
-behavior) is the latest code state, verified green by Actions run
-40669289647 (all four matrix jobs SUCCESS; the catalog job ran 19
-tests and the warehouse job 17 tests against the container on the
-runner). Earlier chain: unit 3.3 commit `30648a8` (run 40668312313,
-warehouse 15 tests), docs commit `2ac8613`; unit 3.2 commit `85a33d3`
-(run 40667190280), docs commit `d55504e`; unit 3.1 commit `78569f3`
-(run 40665107969), docs commit `cadfc6d`; Phase 2: unit 2.1 commit
-`e5ecdee` (run 40648268572), unit 2.2 commit `0c350e4` (run
-40651087397); live psql and restart evidence 14:05-14:35+07:00 below.
+`e59df72` (feat(compose): core stack with internal network and
+discovery) is the latest code state, verified green by Actions run
+40674415027 (all four matrix jobs SUCCESS). Earlier chain: unit 4.1
+commit `34778ed` (Dockerfiles, run 40673481363), docs commit `1a9117b`;
+unit 3.4 commit `f642b38` (run 40669289647, catalog 19 + warehouse 17
+tests), docs commit `adbc761`; unit 3.3 commit `30648a8` (run
+40668312313, warehouse 15 tests), docs commit `2ac8613`; unit 3.2
+commit `85a33d3` (run 40667190280), docs commit `d55504e`; unit 3.1
+commit `78569f3` (run 40665107969), docs commit `cadfc6d`; Phase 2:
+unit 2.1 commit `e5ecdee` (run 40648268572), unit 2.2 commit `0c350e4`
+(run 40651087397); live psql and restart evidence 14:05-14:35+07:00
+below.
 
 ## Phase 0 task status (2026-10-28)
 
@@ -594,7 +601,90 @@ exact toolchain (Maven 3.9.16 + Temurin JDK 21.0.12.1). Nothing else blocked.
   documents an optional one-line override for that case; destructive
   cleanup (down -v) is deliberately NOT documented as part of the
   normal workflow and gets its own warning section in unit 4.3. CI
-  evidence: recorded in the follow-up docs commit.
+  evidence: run 40674415027 SUCCESS on commit `e59df72`
+  (headSha-matched before watching) - all four matrix jobs green.
+
+- 2026-10-28 18:15-18:30+07:00: unit 4.3 (local setup documentation +
+  hostdev override) `VERIFIED`. README.md rewritten where it had gone
+  stale: the status section now names Phases 0-3 VERIFIED (Phase 3 gate
+  closed) and Phase 4's state instead of claiming "Phases 1-10 NOT
+  STARTED"; a Quick start section documents the clean-clone path
+  (copy .env.example -> fill credentials -> `docker compose up --build
+  -d` -> `docker compose ps` -> gateway health + Eureka dashboard +
+  in-container health checks), a ports table states exactly what is
+  published and why, restart and down behavior are documented
+  (including the verified ~40 s Eureka re-registration), and a
+  dedicated DESTRUCTIVE cleanup section warns that `docker compose
+  down -v` deletes the volumes and is intentionally not part of any
+  normal workflow. New optional `compose.hostdev.yaml`: a one-service
+  override that publishes postgres on 127.0.0.1:15432 for host-side
+  mvnw debugging, opt-in only, with the invocation documented. .env.example
+  updated: POSTGRES_PORT is now documented as belonging to the optional
+  override only. Verification: `docker compose -f compose.yaml -f
+  compose.hostdev.yaml config` exit 0 showing the extra 15432->5432
+  publish; live proof - `up -d postgres` with the override made
+  127.0.0.1:15432 reachable from the host, recreating postgres without
+  the override returned it to internal-only (compose ports shows only
+  5432/tcp) and healthy; the other five containers stayed healthy
+  through the postgres recreate (all-healthy after ~90 s total).
+  Honest note: the quick start was verified on this machine (warm
+  Docker layer cache); a cold-cache clean-clone timing was not measured
+  - first `up --build` on a fresh clone takes longer (dependency
+  downloads inside the builder stage) but the commands are identical.
+
+## Phase 4 gate review (2026-10-28, closing Phase 4)
+
+Every ROADMAP Phase 4 deliverable and acceptance criterion, checked
+against recorded evidence only:
+
+- Multi-stage Dockerfile per application, non-root runtime: `VERIFIED`
+  - unit 4.1; four Dockerfiles, `docker build` exit 0 each, `whoami`
+  -> app in every running container.
+- Core compose.yaml: gateway, discovery, catalog, warehouse,
+  PostgreSQL, Redis: `VERIFIED` - unit 4.2; all six services defined,
+  built from source, and healthy.
+- Internal Docker network and persistent volumes: `VERIFIED` - one
+  `stockflow` network, named volumes postgres_data + redis_data,
+  survival proven across down/up.
+- Eureka registration for services: `VERIFIED` - CATALOG-SERVICE,
+  WAREHOUSE-SERVICE, API-GATEWAY all status=UP in the Eureka REST
+  registry; re-registration after restart proven.
+- Health checks/readiness configuration: `VERIFIED` - postgres
+  pg_isready, redis PING, every java service wget against its actuator
+  health, depends_on service_healthy gating, all verified live.
+- .env.example and local setup instructions: `VERIFIED` - unit 4.3
+  README quick start + .env.example.
+- Clean clone can start the core stack using documented commands:
+  `VERIFIED` on the reference machine - the documented commands are
+  exactly the ones executed (config/up/ps/health); honest caveat
+  recorded: cold-cache clean-clone build time not measured, commands
+  identical.
+- All core containers become healthy/ready or expose an accurately
+  documented readiness limitation: `VERIFIED` - 6/6 healthy, no
+  readiness limitation to document.
+- Service-to-service traffic uses internal DNS/discovery, not
+  hard-coded host-only URLs: `VERIFIED` - service logs show
+  jdbc:postgresql://postgres:5432/... and eureka defaultZone
+  http://discovery:8761/eureka/; no localhost URL exists in the
+  compose stack's runtime config.
+- Only required host ports are published: `VERIFIED` - 127.0.0.1
+  8080 (gateway, public entry) and 8761 (operator dashboard) only;
+  postgres/redis/catalog/warehouse internal-only, override file is
+  opt-in and documented as such.
+- Restart behavior is documented and tested: `VERIFIED` - warehouse
+  restart re-registered UP ~40 s; postgres recreate recovered;
+  README documents both.
+- `docker compose down` preserves named volumes; destructive cleanup
+  separately documented: `VERIFIED` - volumes present after down,
+  data intact after re-up, README carries the DESTRUCTIVE section.
+
+Phase 4 overall: CLOSED. Carried-forward notes remain honest open
+items: images are not pushed to any registry (compose builds from
+source; registry publication is a possible later phase item);
+Eureka-registered instance hostnames are container IDs (exercised for
+real by gateway routing in Phase 5); CI builds images only implicitly
+through mvnw - a compose-based CI job remains a candidate enhancement,
+not a gate failure.
 
 ## Phase 3 gate review (2026-10-28, closing Phase 3)
 

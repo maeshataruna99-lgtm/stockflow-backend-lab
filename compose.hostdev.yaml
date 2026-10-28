@@ -1,0 +1,17 @@
+# Optional host-development override (compose.hostdev.yaml).
+#
+# NOT part of the default stack. Use it only when you want to run a single
+# service on the host (mvnw spring-boot:run) against the compose postgres:
+#
+#   docker compose -f compose.yaml -f compose.hostdev.yaml up -d postgres
+#
+# The default core stack (compose.yaml alone) keeps postgres internal-only,
+# per the ROADMAP Phase 4 criterion that only required host ports are
+# published. Host port 15432 (not 5432) because a native PostgreSQL 18
+# Windows service holds 5432 on the reference machine; override with
+# POSTGRES_PORT in .env if your machine differs.
+
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-15432}:5432"
