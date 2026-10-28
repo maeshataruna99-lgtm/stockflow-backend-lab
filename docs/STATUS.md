@@ -9,14 +9,15 @@ Phase 0 - repository and design baseline: `VERIFIED` (committed as
 `24addaa`).
 Phase 1 - Maven/Spring Boot foundations: `IN PROGRESS` (JDK toolchain
 decided in ADR 0004). Apps verified so far: `discovery-server` (11:50),
-`api-gateway` (11:55) - evidence below. Next in order: `catalog-service`.
-The gateway build surfaced a starter deprecation; the follow-up switch is
-recorded in ADR 0005. Phase 0 evidence below remains the gate.
+`api-gateway` (11:55, re-verified 11:58 after the ADR 0005 starter switch),
+`catalog-service` (12:00) - evidence below. Next in order:
+`warehouse-service`. Phase 0 evidence below remains the gate.
 
 ## Last verified commit
 
-The api-gateway scaffold commit `5b0294a` is the latest verified state; its
-verify evidence is recorded in the `docs:` commit immediately following it.
+The catalog-service scaffold commit `0e6524d` is the latest verified state;
+its verify evidence is recorded in the `docs:` commit immediately following
+it.
 
 ## Phase 0 task status (2026-10-28)
 
@@ -110,5 +111,11 @@ exact toolchain (Maven 3.9.16 + Temurin JDK 21.0.12.1). Nothing else blocked.
   Java 21.0.12.1 and javac compiled with `release 21`; both gateway
   deprecation warnings are gone in this run. Remaining non-fatal notes:
   LoadBalancer default-cache and Mockito dynamic-agent warnings.
-- Then, one app per task with the same evidence rule: `catalog-service`,
-  `warehouse-service`.
+- 2026-10-28 12:00+07:00: `catalog-service` scaffold `VERIFIED` - command
+  `.\mvnw.cmd --batch-mode clean verify` in `apps/catalog-service`, exit 0,
+  BUILD SUCCESS, total time 21.311 s; tests run 1, failures 0, errors 0,
+  skipped 0 (`CatalogServiceApplicationTests.contextLoads`); the test JVM
+  ran Java 21.0.12.1 and javac compiled with `release 21`; Spring Boot
+  banner v3.5.16; jar repackaged. Honest notes: LoadBalancer default-cache
+  and Mockito dynamic-agent warnings (non-fatal); no deprecation warnings.
+- Then, one app per task with the same evidence rule: `warehouse-service`.
