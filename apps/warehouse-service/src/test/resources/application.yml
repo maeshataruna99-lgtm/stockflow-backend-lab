@@ -1,13 +1,6 @@
-# Test profile: no database and no eureka on the classpath test.
-# Phase 2 runs Flyway against real databases during live verification
-# (docs/STATUS.md), not inside unit tests; JPA arrives with real
-# database tests in Phase 3.
+# Test profile: no eureka; the database comes from a real Testcontainers
+# PostgreSQL (postgres:16.15-alpine, wired via @ServiceConnection) so the
+# Flyway migrations and the JPA mappings run against the actual engine.
 eureka:
   client:
     enabled: false
-
-spring:
-  autoconfigure:
-    exclude:
-      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
-      - org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration

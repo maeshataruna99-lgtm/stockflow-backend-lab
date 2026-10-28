@@ -21,8 +21,8 @@ obligation there, not as an open risk here. Phase 3 - JPA persistence,
 /api/v1 endpoints and Testcontainers tests - is in progress, one unit
 per commit: unit 3.1 (JPA foundation in catalog-service) `VERIFIED`
 2026-10-28, unit 3.2 (catalog products API) `VERIFIED` 2026-10-28,
-units 3.3-3.4 pending. Phase 0 evidence below remains the
-gate.
+unit 3.3 (warehouse API) `VERIFIED` 2026-10-28, unit 3.4 (OpenAPI)
+pending. Phase 0 evidence below remains the gate.
 
 ## Last verified commit
 
@@ -400,3 +400,51 @@ exact toolchain (Maven 3.9.16 + Temurin JDK 21.0.12.1). Nothing else blocked.
   which belonged to the previous docs commit (40665351249, catalog 4
   tests) - watching it reported success for the WRONG commit; always
   match the run to the commit's headSha before claiming CI evidence.
+
+- 2026-10-28 16:54-17:10+07:00: unit 3.3 (warehouse API) `VERIFIED`.
+  Same patterns as catalog unit 3.2, applied to warehousedb: DTO records
+  only (WarehouseRequest/WarehouseUpdateRequest/WarehouseResponse/
+  StorageLocationRequest/StorageLocationResponse; entities never
+  serialized), Bean Validation, RFC 7807 problem+json via a shared
+  @RestControllerAdvice (400 with errors map, 404, 409 duplicate code
+  via existsByCode/existsByWarehouseIdAndCode pre-checks plus a
+  DataIntegrityViolationException safety net), the shared Pagination
+  helper (page 0-based, size default 20 clamped 1..100),
+  @EnableSpringDataWebSupport VIA_DTO ({"content":[...],"page":{...}}),
+  audit timestamps via @CreationTimestamp/@UpdateTimestamp with the
+  database DEFAULT now() as safety net, and saveAndFlush in the PATCH
+  path so the returned updatedAt is the flushed value. Endpoints:
+  GET/POST /api/v1/warehouses, GET/PATCH /api/v1/warehouses/{id},
+  GET/POST /api/v1/warehouses/{id}/locations. Two warehouse-specific
+  contract points honored: location codes are unique PER WAREHOUSE
+  (composite UNIQUE in V1) - a duplicate within the same warehouse is
+  409 while the same code in another warehouse is 201 - and a missing
+  warehouse for GET /{id}/locations is a documented 404, not an empty
+  page. storage_locations has no updated_at, so StorageLocation carries
+  only created_at. Config: main application.yml gains ddl-auto=validate
+  + open-in-view=false; test application.yml rewritten (eureka off,
+  Phase 2 excludes removed); Testcontainers base class uses the
+  singleton pattern (static initializer + @ServiceConnection, no
+  @Testcontainers) - the catalog lesson applied before it could bite
+  here. Design decision found during implementation: location listing
+  and creation run inside WarehouseService transactions and map entities
+  to DTOs there, because with open-in-view=false a lazy @ManyToOne
+  touched at controller level would throw LazyInitializationException.
+  Build evidence: warehouse clean verify BUILD SUCCESS, 15 tests
+  (14 API + 1 context), 0 failures/errors, 42.157 s, exit 0 - green on
+  the first full run, no fixes needed (the catalog lessons held).
+  Live HTTP evidence against the compose postgres (profile dev,
+  WAREHOUSE_DB_PASSWORD from .env, never echoed): health UP after ~10 s;
+  GET /api/v1/warehouses/1 -> 200 with the seeded WH-JKT01 and populated
+  timestamps; GET /api/v1/warehouses/1/locations -> 200 with the 3
+  seeded rows in the VIA_DTO page shape; POST /api/v1/warehouses
+  {"code":"LIVE-WH"} -> 201 with Location /api/v1/warehouses/2; POST
+  /api/v1/warehouses/2/locations {"code":"LIVE-A-01"} -> 201; duplicate
+  warehouse code WH-JKT01 -> 409 problem+json; GET /9999 -> 404
+  problem+json. Honest notes: the compose warehousedb now carries the
+  demo rows LIVE-WH (id 2) + LIVE-A-01 (id 4) - dev demo data, never
+  part of test assertions; Location headers are relative URIs (same as
+  catalog); eureka connection-refused noise is the known non-fatal
+  partial-stack condition; OpenAPI annotations wait for unit 3.4.
+  CI evidence: recorded in the follow-up docs commit (run id added
+  there, matched to this commit's headSha).
