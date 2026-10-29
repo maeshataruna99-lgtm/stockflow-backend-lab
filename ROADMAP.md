@@ -350,61 +350,84 @@ root user (Phase 5, ADR 0003).
 
 ### Phase 3 --- MVC/JPA/JPQL master data APIs
 
-**Catalog API minimum** - `GET /api/v1/products` with
-pagination/filter. - `POST /api/v1/products`. -
-`GET /api/v1/products/{id}`. - `PATCH /api/v1/products/{id}`. -
-`GET /api/v1/categories`. - JPQL query for active products by
-category/search criteria.
+Status: `VERIFIED` (2026-10-28, gate closed; evidence in `docs/STATUS.md`:
+commits `78569f3`, `85a33d3`, `30648a8`, `f642b38`, docs in `adbc761`,
+CI run 40669289647 green across all 36 tests).
 
-**Warehouse API minimum** - `GET /api/v1/warehouses`. -
-`POST /api/v1/warehouses`. - `GET /api/v1/warehouses/{id}`. -
-`PATCH /api/v1/warehouses/{id}`. -
-`GET /api/v1/warehouses/{id}/locations`. -
-`POST /api/v1/warehouses/{id}/locations`.
+**Catalog API minimum**
+- [x] `GET /api/v1/products` with pagination/filter.
+- [x] `POST /api/v1/products`.
+- [x] `GET /api/v1/products/{id}`.
+- [x] `PATCH /api/v1/products/{id}`.
+- [x] `GET /api/v1/categories`.
+- [x] JPQL query for active products by category/search criteria.
 
-**Acceptance criteria** - DTO validation returns documented 400
-responses. - Missing resource returns 404. - Duplicate SKU/code returns
-documented 409. - Public APIs never serialize JPA entities directly. -
-Pagination has a maximum page size. - JPQL is used by at least one
-documented query. - Repository/service/controller tests cover happy
-paths and failure paths. - OpenAPI reflects actual behavior.
+**Warehouse API minimum**
+- [x] `GET /api/v1/warehouses`.
+- [x] `POST /api/v1/warehouses`.
+- [x] `GET /api/v1/warehouses/{id}`.
+- [x] `PATCH /api/v1/warehouses/{id}`.
+- [x] `GET /api/v1/warehouses/{id}/locations`.
+- [x] `POST /api/v1/warehouses/{id}/locations`.
+
+**Acceptance criteria**
+- [x] DTO validation returns documented 400 responses.
+- [x] Missing resource returns 404.
+- [x] Duplicate SKU/code returns documented 409.
+- [x] Public APIs never serialize JPA entities directly (record DTOs + open-in-view=false).
+- [x] Pagination has a maximum page size (capped at 100).
+- [x] JPQL is used by at least one documented query (`findActiveProductsWithRelations`).
+- [x] Repository/service/controller tests cover happy paths and failure paths (19 catalog tests, 17 warehouse tests).
+- [x] OpenAPI reflects actual behavior (springdoc 2.10.0 serving `/v3/api-docs` and Swagger UI).
 
 ### Phase 4 --- Docker Compose core and service discovery
 
-**Deliverables** - Multi-stage Dockerfile per application, non-root
-runtime. - Core `compose.yaml`: gateway, discovery, catalog, warehouse,
-PostgreSQL, Redis. - Internal Docker network and persistent volumes. -
-Eureka registration for services. - Health checks/readiness
-configuration. - `.env.example` and local setup instructions.
+Status: `VERIFIED` (2026-10-28, gate closed; evidence in `docs/STATUS.md`:
+commits `34778ed`, `1a9117b`, `e59df72`, `0070255`, `0274716`,
+CI runs 40674415027 and 40674854953 all green).
 
-**Acceptance criteria** - Clean clone can start the core stack using
-documented commands. - All core containers become healthy/ready or
-expose an accurately documented readiness limitation. - Catalog and
-warehouse register with Eureka. - Service-to-service traffic uses
-internal DNS/discovery, not hard-coded host-only URLs. - Only required
-host ports are published. - Restart behavior is documented and tested. -
-`docker compose down` preserves named volumes; destructive cleanup is
-separately documented.
+**Deliverables**
+- [x] Multi-stage Dockerfile per application, non-root runtime (`maven:3.9.16-eclipse-temurin-21` -> `eclipse-temurin:21.0.12.1_1-jre-alpine-3.24`, USER app).
+- [x] Core `compose.yaml`: gateway, discovery, catalog, warehouse, PostgreSQL, Redis.
+- [x] Internal Docker network (`stockflow`) and persistent volumes (`postgres_data`, `redis_data`).
+- [x] Eureka registration for services (`CATALOG-SERVICE`, `WAREHOUSE-SERVICE`, `API-GATEWAY` all UP).
+- [x] Health checks/readiness configuration.
+- [x] `.env.example` and local setup instructions (`docs/runbooks/local-setup.md`, `compose.hostdev.yaml`).
 
-**Verification** - `docker compose config`. -
-`docker compose up --build -d`. - `docker compose ps`. - Inspect
-application logs and Eureka registrations. - Call each service's health
-endpoint. - Restart one service and verify registration/recovery.
+**Acceptance criteria**
+- [x] Clean clone can start the core stack using documented commands.
+- [x] All core containers become healthy/ready or expose an accurately documented readiness limitation.
+- [x] Catalog and warehouse register with Eureka.
+- [x] Service-to-service traffic uses internal DNS/discovery, not hard-coded host-only URLs.
+- [x] Only required host ports are published.
+- [x] Restart behavior is documented and tested.
+- [x] `docker compose down` preserves named volumes; destructive cleanup is separately documented.
+
+**Verification**
+- [x] `docker compose config`.
+- [x] `docker compose up --build -d`.
+- [x] `docker compose ps`.
+- [x] Inspect application logs and Eureka registrations.
+- [x] Call each service's health endpoint.
+- [x] Restart one service and verify registration/recovery.
 
 ### Phase 5 --- API Gateway and ten gateway use cases
 
+Status: `IN PROGRESS` (Unit 5.1 `VERIFIED` on 2026-10-29; evidence in
+`docs/STATUS.md`).
+
 Implement and test these individually:
 
-1.  Dynamic routing.
-2.  JWT authentication and role authorization.
-3.  Redis-backed rate limiting.
-4.  Circuit breaker and controlled fallback.
-5.  Discovery-based load balancing with two service instances.
-6.  Timeout and bounded retry for safe/idempotent operations.
-7.  Request/response transformation and trace/request ID.
-8.  Distributed tracing and correlation ID.
-9.  Centralized error contract without leaking internals.
-10. API versioning/backward compatibility.
+1.  [x] **Dynamic routing** (`VERIFIED` 2026-10-29: `GatewayRoutesConfig` in `apps/api-gateway`, WireMock reactive routing test 10/10 green, `guidebooks/01-dynamic-routing.md`, `playground/http/gateway-dynamic-routing.http`).
+2.  [ ] JWT authentication and role authorization.
+3.  [ ] Redis-backed rate limiting.
+4.  [ ] Circuit breaker and controlled fallback.
+5.  [ ] Discovery-based load balancing with two service instances.
+6.  [ ] Timeout and bounded retry for safe/idempotent operations.
+7.  [ ] Request/response transformation and trace/request ID.
+8.  [ ] Distributed tracing and correlation ID.
+9.  [ ] Centralized error contract without leaking internals.
+10. [ ] API versioning/backward compatibility.
 
 **Acceptance criteria for each use case** - Has a guidebook section. -
 Has a Bruno or `.http` request collection. - Has normal and failure-path

@@ -1,3 +1,16 @@
+spring:
+  config:
+    import: "optional:classpath:application.yml"
+  cloud:
+    discovery:
+      client:
+        simple:
+          instances:
+            CATALOG-SERVICE:
+              - uri: http://localhost:${wiremock.server.port:8089}
+            WAREHOUSE-SERVICE:
+              - uri: http://localhost:${wiremock.server.port:8089}
+
 eureka:
   client:
     enabled: false

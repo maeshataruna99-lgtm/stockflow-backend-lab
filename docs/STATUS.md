@@ -38,8 +38,9 @@ multi-stage non-root Dockerfiles (unit 4.1), full six-service compose
 stack with internal network, Eureka registration, health checks,
 restart + volume preservation evidence (unit 4.2), and setup
 documentation with an opt-in hostdev override (unit 4.3); gate review
-below. Phase 5 - API gateway and its ten use cases - is next. Phase 0
-evidence below remains the gate.
+below. Phase 5 - API gateway and its ten use cases: `IN PROGRESS` - unit 5.1
+(Dynamic Routing) `VERIFIED` on 2026-10-29 (evidence below); unit 5.2 (JWT
+authentication & authorization) is next. Phase 0 evidence below remains the gate.
 
 ## Last verified commit
 
@@ -745,3 +746,23 @@ decision + superseding ADR); demo/prod profiles stay unexercised until
 Phase 4; root-account seeding remains deferred to Phase 5 (ADR 0003);
 springdoc "enabled by default" production disabling is a Phase 4/5
 configuration question.
+
+## Phase 5 progress log
+
+- 2026-10-29 12:28+07:00: unit 5.1 (dynamic routing in api-gateway)
+  `VERIFIED`. Added `spring-cloud-contract-wiremock` to `apps/api-gateway/pom.xml`
+  (version managed by Spring Cloud 2025.0.3 BOM) for in-memory reactive routing
+  verification without requiring external daemon infrastructure. Created
+  `dev.stockflow.gateway.config.GatewayRoutesConfig` using Spring Cloud Gateway's
+  `RouteLocatorBuilder` defining dynamic routes:
+  - `catalog-products-route`: `/api/v1/products`, `/api/v1/products/**` -> `lb://CATALOG-SERVICE`
+  - `catalog-categories-route`: `/api/v1/categories`, `/api/v1/categories/**` -> `lb://CATALOG-SERVICE`
+  - `warehouse-route`: `/api/v1/warehouses`, `/api/v1/warehouses/**` -> `lb://WAREHOUSE-SERVICE`
+  Automated tests in `DynamicRoutingGatewayTest` executed against local random port
+  with WireMock stubbing: 9 assertions covering product listing/detail/creation,
+  category listing, warehouse listing/locations, and strict perimeter safeguards:
+  local gateway actuator health handled locally (HTTP 200), unmapped unknown paths
+  returning HTTP 404, and downstream internal actuator paths returning HTTP 404.
+  All 10 tests across `api-gateway` passed green (`.\mvnw.cmd test` exit code 0).
+  Deliverables created: `guidebooks/01-dynamic-routing.md` and runnable request
+  collection `playground/http/gateway-dynamic-routing.http`.

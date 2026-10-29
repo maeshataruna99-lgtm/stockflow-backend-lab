@@ -1,0 +1,66 @@
+### Gateway Dynamic Routing Playground
+### Gateway runs on http://localhost:8080 (single public entry point)
+
+@gatewayUrl = http://localhost:8080
+
+### 1. Catalog Products - List (routed to CATALOG-SERVICE)
+GET {{gatewayUrl}}/api/v1/products
+Accept: application/json
+
+### 2. Catalog Products - Filter by search & category (routed to CATALOG-SERVICE)
+GET {{gatewayUrl}}/api/v1/products?search=Keyboard&category=CAT-ELECTRONICS&page=0&size=20
+Accept: application/json
+
+### 3. Catalog Products - Get by ID (routed to CATALOG-SERVICE)
+GET {{gatewayUrl}}/api/v1/products/1
+Accept: application/json
+
+### 4. Catalog Products - Create new product (routed to CATALOG-SERVICE)
+POST {{gatewayUrl}}/api/v1/products
+Content-Type: application/json
+Accept: application/json
+
+{
+  "sku": "PROD-WIRELESS-MOUSE",
+  "name": "Wireless Ergonomic Mouse",
+  "description": "2.4GHz wireless ergonomic optical mouse",
+  "categoryId": 1,
+  "unitId": 1
+}
+
+### 5. Catalog Categories - List (routed to CATALOG-SERVICE)
+GET {{gatewayUrl}}/api/v1/categories
+Accept: application/json
+
+### 6. Warehouse - List warehouses (routed to WAREHOUSE-SERVICE)
+GET {{gatewayUrl}}/api/v1/warehouses
+Accept: application/json
+
+### 7. Warehouse - Get warehouse by ID (routed to WAREHOUSE-SERVICE)
+GET {{gatewayUrl}}/api/v1/warehouses/1
+Accept: application/json
+
+### 8. Warehouse Locations - List locations (routed to WAREHOUSE-SERVICE)
+GET {{gatewayUrl}}/api/v1/warehouses/1/locations
+Accept: application/json
+
+### 9. Warehouse Locations - Create location (routed to WAREHOUSE-SERVICE)
+POST {{gatewayUrl}}/api/v1/warehouses/1/locations
+Content-Type: application/json
+Accept: application/json
+
+{
+  "code": "AISLE-01-SHELF-B"
+}
+
+### 10. Safeguard Check: Gateway's own actuator health (handled locally, UP)
+GET {{gatewayUrl}}/actuator/health
+Accept: application/json
+
+### 11. Safeguard Check: Unrouted unknown path (expects 404 from Gateway)
+GET {{gatewayUrl}}/api/v1/unknown
+Accept: application/json
+
+### 12. Safeguard Check: Downstream internal actuator leak prevention (expects 404)
+GET {{gatewayUrl}}/api/v1/products/actuator/env
+Accept: application/json

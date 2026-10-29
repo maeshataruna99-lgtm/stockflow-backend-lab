@@ -4,6 +4,21 @@ server:
 spring:
   application:
     name: api-gateway
+  cloud:
+    gateway:
+      routes:
+        - id: catalog-products-route
+          uri: lb://CATALOG-SERVICE
+          predicates:
+            - Path=/api/v1/products, /api/v1/products/**
+        - id: catalog-categories-route
+          uri: lb://CATALOG-SERVICE
+          predicates:
+            - Path=/api/v1/categories, /api/v1/categories/**
+        - id: warehouse-route
+          uri: lb://WAREHOUSE-SERVICE
+          predicates:
+            - Path=/api/v1/warehouses, /api/v1/warehouses/**
 
 eureka:
   client:
