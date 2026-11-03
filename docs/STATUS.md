@@ -1652,3 +1652,29 @@ Phase 6 overall: `VERIFIED`, gate closed, with the open items above.
   conflict between a long replica query and replay; the services do not route reads to the replica
   (no second DataSource); the lab replica data is throwaway; CI has not run on this branch (the test
   needs Docker with network support).
+- 2026-11-03: unit 7.11 (sharding and partitioning) `VERIFIED` as two isolated experiments, as the
+  ROADMAP asks; neither the services' schema nor the compose stack uses partitioning or sharding. No
+  production code, no new dependency. `PartitioningTest` (6 tests, own container): `lab_events`,
+  1,200,000 rows range-partitioned by month on `created_at` (12 partitions plus a default one), a flat
+  twin with the same rows and an index on `created_at`, a hash-partitioned table. A filter on one day
+  read exactly 1 partition; a filter on other columns read 13 tables; timings of the one-day query:
+  0.86 ms partitioned against 2.48 ms flat in run 1 and 3.02 against 3.10 ms in run 2 (no stable
+  difference), of the other-columns query 70.6 / 90.3 ms and 82.0 / 78.7 ms (no difference); removing
+  January (101,927 rows): `DELETE` 138 and 137 ms against `DETACH PARTITION` + `DROP TABLE` 19 and
+  21 ms; `PRIMARY KEY (id)` on the partitioned table refused with 0A000, `(id, created_at)` accepted;
+  insert outside every range 23514 without a default partition and into the default one with it; 100,000
+  ids over 4 hash partitions: 24,925, 24,971, 24,978, 25,126. `ShardingTest` (7 tests, two PostgreSQL
+  containers as shards, a CRC32 mod 2 router in the test): 10,000 accounts 5,001 and 4,999; lookup by id
+  asked 1 shard, by email 2; the same email existed twice across the shards while a second insert on one
+  shard failed with 23505; a cross-shard transfer with a crash between the two commits left 170 of 200,
+  a compensating credit restored 200; the same transfer inside one shard rolled back to 200; resharding
+  2 to 3 shards over 100,000 keys moved 66.7 % of the keys with modulo and 30.4 % with a hash ring
+  (128 points per shard).
+  Mistake of mine: the first run of `ShardingTest` failed 3 of 7 because the tests share the shard
+  databases and JUnit's method order is not fixed (an exact-count assertion saw rows of other tests, two
+  others ran before their data existed); fixed with `@Order`, assertions unchanged. warehouse-service
+  `clean verify`: 100 tests, 0 failures. Guidebook `guidebooks/25-sharding-and-partitioning.md`.
+  Limits: the timing difference of partitioning on this data set is within noise, only plan shape and
+  retention are claimed; no resharding or rebalancing under traffic; no cross-shard consistent read; no
+  distributed transaction (none claimed); no compose lab; CI has not run on this branch.
+  All eleven Phase 7 units have evidence; the Phase 7 gate review (CI on the whole branch) is still to do.
