@@ -1247,3 +1247,34 @@ labs).
   Limits: only the product by id is cached (lists and searches are not);
   the reader/writer race can leave a stale copy for up to the TTL; one
   single run on this machine; 6.2-6.4 not started.
+
+- 2026-11-03: unit 6.2 (Redis eviction lab) `VERIFIED`. No new dependency.
+  Controlled configuration: service `redis-lab` in `compose.labs.yaml`
+  (profile `eviction`, `redis:7.4.12-alpine`, `--maxmemory` from
+  `LAB_REDIS_MAXMEMORY`, `--maxmemory-policy` from `LAB_REDIS_POLICY`,
+  `--maxmemory-samples 10`), separate from the core Redis that also holds the
+  gateway rate-limit keys. Experiment script `labs/caching/eviction-lab.sh`.
+  Automated: `RedisEvictionPolicyTest` (5 tests, 2 MB cap, 3000 cold keys of 1 KB,
+  50 hot keys: allkeys-lru keeps >= 45 hot keys with no OOM, allkeys-random keeps
+  < 30, noeviction gives OOM and 0 evictions, volatile-lru without TTL gives OOM,
+  volatile-lru with TTL evicts) and `ProductCacheFullRedisTest` (Redis at
+  `noeviction` and full: product reads return 200 with the right body, exactly one
+  error counted, and after freeing keys the next reads miss then hit). catalog-service
+  `clean verify`: 50 tests, 0 failures, run twice (the probabilistic eviction tests
+  were stable in both). Assertion detail fixed on the way: Spring wraps the Redis
+  error as "Error in execution", the OOM text is in the root cause.
+  Measured (script, 8 MB cap, 12000 cold keys, one run per row):
+  noeviction 6603 writes refused, 50/50 hot left, 0 evicted; allkeys-lru 0 refused,
+  50/50 hot, 6699 evicted; allkeys-random 0 refused, 8/50 hot, 10785 evicted;
+  volatile-lru without TTL 11951 refused, 0 evicted; volatile-lru with TTL 3600 s 321
+  refused, 49/50 hot, 6573 evicted.
+  Lab defect found and fixed: the first script wrote everything in about a second;
+  Redis ages keys in whole seconds, so LRU could not tell hot from cold and
+  volatile-lru with TTL left 0 of 50 hot keys (the slower automated test kept them).
+  The script now writes in batches one second apart.
+  Finding for the project, not changed here: the core Redis has no `maxmemory`
+  (`CONFIG GET maxmemory-policy` shows noeviction), so its memory is unbounded, and
+  it is shared with the gateway rate limiter; capping it needs a decision.
+  Limits: single run per policy on one machine; allkeys-lfu and volatile-ttl not
+  run; replication behavior not exercised; the lab Redis container was removed
+  afterwards and the core stack was unchanged.
