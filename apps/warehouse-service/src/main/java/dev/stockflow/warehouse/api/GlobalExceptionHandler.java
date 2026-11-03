@@ -2,6 +2,9 @@ package dev.stockflow.warehouse.api;
 
 import jakarta.validation.ConstraintViolationException;
 import java.sql.SQLException;
+import java.sql.SQLTransientConnectionException;
+import org.springframework.jdbc.CannotGetJdbcConnectionException;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.core.NestedExceptionUtils;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.PessimisticLockingFailureException;
@@ -65,6 +68,21 @@ public class GlobalExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
                 "The row is locked by another request; retry shortly");
         problem.setTitle("Row locked");
+        return problem;
+    }
+
+    /**
+     * No connection could be obtained for the transaction: the pool is exhausted (the wait for a free connection ran
+     * out, spring.datasource.hikari.connection-timeout) or the database is unreachable. Either way the request did
+     * nothing, so 503 and the caller may retry.
+     */
+    @ExceptionHandler({CannotCreateTransactionException.class, CannotGetJdbcConnectionException.class})
+    ProblemDetail handleNoConnection(RuntimeException ex) {
+        boolean poolTimeout = NestedExceptionUtils.getMostSpecificCause(ex) instanceof SQLTransientConnectionException;
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
+                poolTimeout ? "All database connections are in use; retry shortly"
+                        : "The database is not reachable; retry shortly");
+        problem.setTitle(poolTimeout ? "Database busy" : "Database unavailable");
         return problem;
     }
 

@@ -16,6 +16,11 @@ spring:
     username: warehouse_app
     # No default: startup fails fast when the password env is missing.
     password: ${WAREHOUSE_DB_PASSWORD}
+    hikari:
+      # explicit instead of the defaults (10 and 30 s): a request that cannot get a connection within 3 s fails with a
+      # 503 (DatabaseBusy handling in GlobalExceptionHandler) instead of hanging; pool sizing evidence: guidebook 19
+      maximum-pool-size: 10
+      connection-timeout: 3000
   flyway:
     # Migrates the primary DataSource above on every startup.
     locations: classpath:db/migration

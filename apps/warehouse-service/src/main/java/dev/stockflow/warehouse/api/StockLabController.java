@@ -7,6 +7,7 @@ import dev.stockflow.warehouse.api.dto.StockWithdrawRequest;
 import io.swagger.v3.oas.annotations.Hidden;
 import jakarta.validation.Valid;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -26,9 +27,17 @@ import org.springframework.web.bind.annotation.RestController;
 public class StockLabController {
 
     private final StockService stockService;
+    private final PoolLabService poolLabService;
 
-    StockLabController(StockService stockService) {
+    StockLabController(StockService stockService, PoolLabService poolLabService) {
         this.stockService = stockService;
+        this.poolLabService = poolLabService;
+    }
+
+    /** Connection pool lab: holds one database connection for {@code millis} (at most 10 s). */
+    @GetMapping("/lab/hold")
+    void hold(@RequestParam(defaultValue = "0") long millis) {
+        poolLabService.hold(millis);
     }
 
     @PostMapping("/{id}/withdraw-unsafe")
