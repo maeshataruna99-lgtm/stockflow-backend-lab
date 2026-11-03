@@ -3,6 +3,7 @@ package dev.stockflow.catalog.cache;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -22,17 +23,26 @@ final class ConcurrentGets {
     }
 
     static List<Reply> run(MockMvc mockMvc, String path, int requests) throws Exception {
+        Callable<Reply> request = () -> {
+            var response = mockMvc.perform(get(path)).andReturn().getResponse();
+            return new Reply(response.getStatus(), response.getContentAsString());
+        };
+        return runAll(Collections.nCopies(requests, request));
+    }
+
+    /** Releases all given requests at the same moment, for example some per application instance. */
+    static List<Reply> runAll(List<Callable<Reply>> calls) throws Exception {
+        int requests = calls.size();
         ExecutorService pool = Executors.newFixedThreadPool(requests);
         CountDownLatch ready = new CountDownLatch(requests);
         CountDownLatch go = new CountDownLatch(1);
         try {
             List<Future<Reply>> futures = new ArrayList<>();
-            for (int i = 0; i < requests; i++) {
+            for (Callable<Reply> request : calls) {
                 Callable<Reply> call = () -> {
                     ready.countDown();
                     go.await();
-                    var response = mockMvc.perform(get(path)).andReturn().getResponse();
-                    return new Reply(response.getStatus(), response.getContentAsString());
+                    return request.call();
                 };
                 futures.add(pool.submit(call));
             }
