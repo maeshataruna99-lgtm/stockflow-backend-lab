@@ -2,6 +2,7 @@ package dev.stockflow.warehouse.api;
 
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -40,6 +41,21 @@ public class GlobalExceptionHandler {
     ProblemDetail handleInsufficientStock(InsufficientStockException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
         problem.setTitle("Insufficient stock");
+        return problem;
+    }
+
+    @ExceptionHandler(ConcurrentUpdateException.class)
+    ProblemDetail handleConcurrentUpdate(ConcurrentUpdateException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Concurrent update");
+        return problem;
+    }
+
+    @ExceptionHandler(PessimisticLockingFailureException.class)
+    ProblemDetail handleLockTimeout(PessimisticLockingFailureException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
+                "The row is locked by another request; retry shortly");
+        problem.setTitle("Row locked");
         return problem;
     }
 

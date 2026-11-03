@@ -35,6 +35,10 @@ public class StockLevel {
     @Column(nullable = false)
     private int quantity;
 
+    // read-only on purpose: the JPA save in the unsafe lab path must stay unversioned; versioned writers use SQL
+    @Column(nullable = false, insertable = false, updatable = false)
+    private long version;
+
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
@@ -67,6 +71,10 @@ public class StockLevel {
 
     public void setQuantity(int quantity) {
         this.quantity = quantity;
+    }
+
+    public long getVersion() {
+        return version;
     }
 
     public Instant getUpdatedAt() {

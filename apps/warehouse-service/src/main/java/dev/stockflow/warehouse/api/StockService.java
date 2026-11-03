@@ -6,19 +6,35 @@ import dev.stockflow.warehouse.domain.StockLevel;
 import dev.stockflow.warehouse.domain.StorageLocation;
 import dev.stockflow.warehouse.repository.StockLevelRepository;
 import dev.stockflow.warehouse.repository.StorageLocationRepository;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /** Stock use cases: create a stock row, read it, withdraw from it. */
 @Service
+@EnableConfigurationProperties(StockProperties.class)
 public class StockService {
 
     private final StockLevelRepository stockLevelRepository;
     private final StorageLocationRepository storageLocationRepository;
+    private final StockProperties properties;
+    private final MeterRegistry meters;
+    private final JdbcTemplate jdbcTemplate;
+    private final TransactionTemplate transaction;
 
-    StockService(StockLevelRepository stockLevelRepository, StorageLocationRepository storageLocationRepository) {
+    StockService(StockLevelRepository stockLevelRepository, StorageLocationRepository storageLocationRepository,
+                 StockProperties properties, MeterRegistry meters, JdbcTemplate jdbcTemplate,
+                 PlatformTransactionManager transactionManager) {
         this.stockLevelRepository = stockLevelRepository;
         this.storageLocationRepository = storageLocationRepository;
+        this.properties = properties;
+        this.meters = meters;
+        this.jdbcTemplate = jdbcTemplate;
+        this.transaction = new TransactionTemplate(transactionManager);
     }
 
     @Transactional
@@ -59,6 +75,53 @@ public class StockService {
     @Transactional
     public StockLevelResponse withdrawUnsafe(Long id, int quantity) {
         StockLevel stock = stockLevelRepository.findById(id)
+                .orElseThrow(() -> ResourceNotFoundException.of("stock", id));
+        if (stock.getQuantity() < quantity) {
+            throw new InsufficientStockException("stock " + id + " has " + stock.getQuantity()
+                    + " units, " + quantity + " requested");
+        }
+        stock.setQuantity(stock.getQuantity() - quantity);
+        return StockLevelResponse.from(stockLevelRepository.saveAndFlush(stock));
+    }
+
+    /**
+     * Lab (locking lab): optimistic locking. Read the row and its version, compute in Java, write only if the version
+     * is still the same. On a lost race re-read and try again, at most {@code optimisticAttempts} times, then give up
+     * with a 409 that is safe to retry. Each attempt is its own transaction so it sees the committed row.
+     */
+    public StockLevelResponse withdrawOptimistic(Long id, int quantity) {
+        for (int attempt = 1; attempt <= properties.optimisticAttempts(); attempt++) {
+            if (attempt > 1) {
+                meters.counter("warehouse.stock.retries", "lock", "optimistic").increment();
+            }
+            Boolean written = transaction.execute(status -> {
+                StockLevel stock = stockLevelRepository.findById(id)
+                        .orElseThrow(() -> ResourceNotFoundException.of("stock", id));
+                if (stock.getQuantity() < quantity) {
+                    throw new InsufficientStockException("stock " + id + " has " + stock.getQuantity()
+                            + " units, " + quantity + " requested");
+                }
+                return stockLevelRepository.updateQuantityIfVersion(
+                        id, stock.getQuantity() - quantity, stock.getVersion()) == 1;
+            });
+            if (Boolean.TRUE.equals(written)) {
+                return get(id);
+            }
+        }
+        throw new ConcurrentUpdateException("stock " + id + " changed concurrently "
+                + properties.optimisticAttempts() + " times in a row, retry the request");
+    }
+
+    /**
+     * Lab (locking lab): pessimistic locking. SELECT ... FOR UPDATE holds the row lock from the read to the commit,
+     * so concurrent withdrawals queue up. The wait is bounded by lock_timeout (PostgreSQL setting, local to this
+     * transaction); past it the call fails with a locking exception instead of hanging.
+     */
+    @Transactional
+    public StockLevelResponse withdrawPessimistic(Long id, int quantity) {
+        jdbcTemplate.queryForObject("SELECT set_config('lock_timeout', ?, true)", String.class,
+                properties.lockTimeout().toMillis() + "ms");
+        StockLevel stock = stockLevelRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> ResourceNotFoundException.of("stock", id));
         if (stock.getQuantity() < quantity) {
             throw new InsufficientStockException("stock " + id + " has " + stock.getQuantity()

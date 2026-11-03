@@ -12,7 +12,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The deliberately broken withdraw of the race condition lab. It does not exist unless
+ * The deliberately broken withdraw of the race condition lab and the two locking variants of the locking lab. They do
+ * not exist unless
  * {@code stockflow.lab.unsafe-stock=true}; compose.labs.yaml sets it, the core compose file does not.
  */
 @Hidden
@@ -30,5 +31,15 @@ public class StockLabController {
     @PostMapping("/{id}/withdraw-unsafe")
     StockLevelResponse withdrawUnsafe(@PathVariable Long id, @Valid @RequestBody StockWithdrawRequest request) {
         return stockService.withdrawUnsafe(id, request.quantity());
+    }
+
+    @PostMapping("/{id}/withdraw-optimistic")
+    StockLevelResponse withdrawOptimistic(@PathVariable Long id, @Valid @RequestBody StockWithdrawRequest request) {
+        return stockService.withdrawOptimistic(id, request.quantity());
+    }
+
+    @PostMapping("/{id}/withdraw-pessimistic")
+    StockLevelResponse withdrawPessimistic(@PathVariable Long id, @Valid @RequestBody StockWithdrawRequest request) {
+        return stockService.withdrawPessimistic(id, request.quantity());
     }
 }
