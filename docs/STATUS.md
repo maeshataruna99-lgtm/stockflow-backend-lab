@@ -1468,3 +1468,34 @@ Phase 6 overall: `VERIFIED`, gate closed, with the open items above.
   processes would not); the lock-based fix for write skew is not tested here, only SERIALIZABLE;
   the SERIALIZABLE retry is described, not implemented; the READ UNCOMMITTED row of the table in
   the guidebook is proven only for dirty reads; CI has not run on this branch.
+- 2026-11-03: unit 7.5 (connection pooling) `VERIFIED`. No new dependency. warehouse-service
+  `application.yml` now sets `spring.datasource.hikari.maximum-pool-size: 10` and
+  `connection-timeout: 3000` (the defaults are 10 and 30 s); catalog and the other services
+  still use the defaults (carried note). `GlobalExceptionHandler` maps
+  `CannotCreateTransactionException` and `CannotGetJdbcConnectionException` to a 503 problem
+  ("Database busy" when the root cause is Hikari's `SQLTransientConnectionException`, else
+  "Database unavailable"). Lab only: `GET /api/v1/stock/lab/hold?millis=` and
+  `PoolLabService` (behind `stockflow.lab.unsafe-stock`).
+  Tests written first: the config test and the exhaustion test failed before the
+  implementation (exhaustion: 0 responses of 200 or 503, the endpoint was a 404). After:
+  `ConnectionPoolTest` (pool 5, wait 1 s, 20 requests holding 600 ms: 10 x 200 and 10 x 503,
+  503 after 1018 to 1060 ms warm and 1723 to 1843 ms on the cold first burst, peak pending 10
+  and 15, pool usable afterwards), `PoolSizingTest` 2 measurements, `DataSourceConfigTest`.
+  warehouse-service `clean verify`: 71 tests, 0 failures.
+  Pool size against throughput (two runs, 8 cores, 32 client threads): pg_sleep 50 ms x 160:
+  8404/8390, 4255/4216, 2177/2174, 1244/1252, 987/991 ms for pools 1/2/4/8/16; CPU query
+  (500k-row series) x 40: 5283/5333, 3327/3273, 2037/1944, 1801/1724, 1870/1885 ms. A first
+  heavier CPU run (1.5M rows x 120, one run, since reduced because it took 2 minutes) gave
+  53217, 27833, 17931, 14815, 22005 ms, pool 16 slower than 8; the lighter batch showed the
+  plateau but not the slowdown.
+  Finding: the Micrometer gauge `hikaricp.connections.active` stayed at 5 for 732 ms after a
+  burst; HikariCP 7.0.2 builds its PoolStats with a 1 s refresh (read from the class files), it
+  is not a leak (53 ms and 732 ms to reach 0 in two bursts).
+  Live on the lab stack (`labs/database/pool-lab.sh`, pool 10, wait 3 s, hold 1000 ms): 10
+  requests: 10 x 200; 40 requests: 40 x 200 in three runs (the last group waited about 3.0 s,
+  at the timeout, my prediction of failures was wrong); 60 requests: 40 x 200 and 20 x 503 in
+  all three runs; 40 requests held 100 ms: 40 x 200; a single request after the burst: 200.
+  Wall times include about 1 s of `docker exec` overhead. Guidebook
+  `guidebooks/19-connection-pooling.md`.
+  Limits: only the warehouse pool is bounded; no statement timeout; no `max_connections`
+  experiment; the CPU result depends on the machine; CI has not run on this branch.
