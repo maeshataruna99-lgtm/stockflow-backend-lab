@@ -1374,3 +1374,375 @@ Open items and carried notes:
 6. Lab numbers are one run per row on one machine; they are not benchmarks.
 
 Phase 6 overall: `VERIFIED`, gate closed, with the open items above.
+
+## Phase 7 progress log
+
+- 2026-11-03: unit 7.1 (race condition and lost update) `VERIFIED`. Branch
+  `feat/phase7-database-labs`. No new dependency. warehouse-service gets Flyway V3
+  `stock_levels` (location FK, product id without FK, `CHECK (quantity >= 0)`, unique per
+  location and product), `POST /api/v1/stock`, `GET /api/v1/stock/{id}` and
+  `POST /api/v1/stock/{id}/withdraw` (ADMIN, 200/400/404/409). Decision by the user: the
+  lab lives in the warehouse as a `stock_levels` table.
+  Tests first against the naive read-modify-write `withdraw`: both safe tests failed
+  (`StockRaceConditionTest.neverTakesMoreThanInStock`: 100 of 100 accepted for a stock of
+  50; `takenPlusLeftEqualsStart`: accepted x 3 + left = 208 for a stock of 100). Fix:
+  `StockLevelRepository.withdraw` is one conditional `UPDATE ... WHERE id = :id AND quantity >= :n`,
+  0 rows = 404 or 409. The naive code stays as `StockService.withdrawUnsafe`, exposed
+  only by `StockLabController` when `stockflow.lab.unsafe-stock=true` (set in
+  `compose.labs.yaml`; `StockApiTest.unsafeEndpointIsOffByDefault` proves it is a 404
+  otherwise).
+  After the fix: `StockRaceConditionTest` 4 tests (safe: 50 accepted and 50 refused,
+  0 left; 33 x 3 + 1 = 100; unsafe: round 1 accepted 100 and left 93 of 100, so updates were
+  lost) and `StockApiTest` 6 tests, 0 failures. warehouse-service `clean verify`: 41 tests,
+  0 failures.
+  Live on the lab stack (`labs/database/race-lab.sh`, 100 simultaneous `wget` requests
+  from the gateway container straight at the warehouse): unsafe, stock 100: accepted 100,
+  left 88, 89 and 92 in three runs (accepted + left 188, 189, 192); unsafe, stock 50:
+  accepted 100, left 35; safe, stock 100: accepted 100, left 0 in all three runs; safe,
+  stock 50: accepted 50, 50 refused with 409, left 0. One run per row (three for stock 100),
+  one machine, not a benchmark. Guidebook `guidebooks/15-race-condition.md`.
+  Limits: the unsafe test is probabilistic (up to 10 rounds, the first round showed it);
+  the fix covers a single row, rules across rows are for the locking and isolation units;
+  stock endpoints are not routed by the gateway; CI has not run on this branch.
+- 2026-11-03: unit 7.2 (optimistic and pessimistic locking) `VERIFIED`. No new dependency.
+  Flyway V4 adds `stock_levels.version`. `StockService.withdrawOptimistic` re-reads and
+  retries a `UPDATE ... WHERE version = :read` at most `stockflow.stock.optimistic-attempts`
+  (5) times, then a 409 "Concurrent update"; `withdrawPessimistic` uses
+  `SELECT ... FOR UPDATE` with a transaction-local `lock_timeout`
+  (`stockflow.stock.lock-timeout`, 2 s), a timeout is a 503 "Row locked". Both are lab
+  endpoints behind `stockflow.lab.unsafe-stock`. The entity `version` is read-only on
+  purpose, not a JPA `@Version`, because `@Version` would make the unsafe path of 7.1
+  fail with an optimistic lock exception and hide the bug; the atomic withdraw also adds 1
+  to the version. `StockLockingTest` 6 tests (tests written before the code, red by
+  compile error, then green): optimistic keeps accepted + left = 100 (accepted 54, gave up
+  46, 275 retries) and never oversells at stock 50; pessimistic accepts 100 of 100 and
+  leaves 0, accepts exactly 50 of 100 at stock 50; a withdrawal blocked by a lock held in
+  another transaction gave up after 2040 ms. warehouse-service `clean verify`: 47 tests,
+  0 failures.
+  Live on the lab stack (`labs/database/race-lab.sh`, 100 simultaneous requests, stock 100,
+  three runs): optimistic accepted 46, 52, 52 (left 54, 48, 48, accepted + left 100 each
+  time); pessimistic accepted 100, left 0 each time; atomic UPDATE accepted 100, left 0;
+  unsafe left 91, 88, 92. Stock 50: optimistic accepted 44, left 6; pessimistic accepted 50,
+  left 0; atomic accepted 50, left 0; unsafe accepted 100, left 40. One run per row (three at
+  stock 100), one machine, not a benchmark. Guidebook
+  `guidebooks/16-optimistic-and-pessimistic-locking.md`.
+  Limits: single row only; optimistic gives up about half of the requests under 100-way
+  contention on one row, which is the finding, not a tuning target; `lock_timeout` is
+  PostgreSQL specific; CI has not run on this branch.
+- 2026-11-03: unit 7.3 (deadlock) `VERIFIED`. No new dependency. warehouse-service gets
+  `POST /api/v1/stock/transfer` (two rows locked in one `ORDER BY id ... FOR UPDATE`
+  statement, ascending id, then two version-bumping UPDATEs; 200/400/404/409) and the lab
+  endpoint `POST /api/v1/stock/transfer-unordered?pauseMillis=` (locks from, `pg_sleep`,
+  locks to; behind `stockflow.lab.unsafe-stock`). `lock_timeout` stays set per transaction.
+  A `PessimisticLockingFailureException` whose root cause has SQLSTATE 40P01 is a 409
+  "Deadlock" problem, other lock failures remain 503 "Row locked". Tests
+  (`StockDeadlockTest` 4 and 2 new in `StockApiTest`): two opposite unordered transfers, one
+  fails with 40P01 and one commits, resolved in 1541 ms (bounded by the test at 10 s); the
+  rows differ from the start only by the winner's unit (rollback complete); retrying the
+  loser with the ordered `transfer` restores 10 and 10; 40 ordered transfers on 16 threads in
+  both directions all succeed, rows end at 100 and 100; a refused or 404 transfer changes
+  nothing. warehouse-service `clean verify`: 54 tests, 0 failures. The deadlock test passed on
+  its first run; there was no earlier red state for the fix, only compile errors before the
+  methods existed.
+  Live on the lab stack (`labs/database/deadlock-lab.sh`, 3 rounds, two opposite transfers
+  at the same moment): unordered: 200 and 409 in every round, rows 9/11, 11/9, 9/11, PostgreSQL
+  logged +1 "deadlock detected" per round; ordered: 200 and 200 in every round, rows 10/10,
+  +0 deadlocks. One run per row, one machine, not a benchmark. Guidebook
+  `guidebooks/17-deadlock.md`.
+  Limits: two rows only; ordering relies on the lock order of one SELECT with ORDER BY;
+  deadlocks from foreign key locks are not covered; CI has not run on this branch.
+- 2026-11-03: unit 7.4 (transactions, ACID, isolation levels) `VERIFIED`. No production code
+  and no new dependency. `IsolationLevelTest` (10 tests incl. the inherited context test) drives
+  two JDBC connections from one thread in a fixed order against the real PostgreSQL container, so no
+  outcome depends on timing. Observed: no dirty read even at READ UNCOMMITTED; non-repeatable
+  read at READ COMMITTED (10 then 7) and not at REPEATABLE READ (10 then 10); phantom read at
+  READ COMMITTED (2 then 3 rows) and not at REPEATABLE READ (2 then 2); lost update at READ
+  COMMITTED (two withdrawals of 3 from 10 leave 7, not 4) and a 40001 rejection at REPEATABLE
+  READ with the row left at 7; write skew across two rows accepted at REPEATABLE READ (total 0,
+  rule "at least 1 left" broken) and rejected at SERIALIZABLE with 40001 (`could not serialize
+  access due to read/write dependencies among transactions`, reason `Canceled on identification
+  as a pivot, during write`, raised at the UPDATE; total stays 1). The two runs of the class
+  both passed; the tests passed on their first run, so there is no earlier red state. Guidebook
+  `guidebooks/18-isolation-levels.md`.
+  Limits: no compose lab for this unit (the tests give an exact interleaving that background
+  processes would not); the lock-based fix for write skew is not tested here, only SERIALIZABLE;
+  the SERIALIZABLE retry is described, not implemented; the READ UNCOMMITTED row of the table in
+  the guidebook is proven only for dirty reads; CI has not run on this branch.
+- 2026-11-03: unit 7.5 (connection pooling) `VERIFIED`. No new dependency. warehouse-service
+  `application.yml` now sets `spring.datasource.hikari.maximum-pool-size: 10` and
+  `connection-timeout: 3000` (the defaults are 10 and 30 s); catalog and the other services
+  still use the defaults (carried note). `GlobalExceptionHandler` maps
+  `CannotCreateTransactionException` and `CannotGetJdbcConnectionException` to a 503 problem
+  ("Database busy" when the root cause is Hikari's `SQLTransientConnectionException`, else
+  "Database unavailable"). Lab only: `GET /api/v1/stock/lab/hold?millis=` and
+  `PoolLabService` (behind `stockflow.lab.unsafe-stock`).
+  Tests written first: the config test and the exhaustion test failed before the
+  implementation (exhaustion: 0 responses of 200 or 503, the endpoint was a 404). After:
+  `ConnectionPoolTest` (pool 5, wait 1 s, 20 requests holding 600 ms: 10 x 200 and 10 x 503,
+  503 after 1018 to 1060 ms warm and 1723 to 1843 ms on the cold first burst, peak pending 10
+  and 15, pool usable afterwards), `PoolSizingTest` 2 measurements, `DataSourceConfigTest`.
+  warehouse-service `clean verify`: 71 tests, 0 failures.
+  Pool size against throughput (two runs, 8 cores, 32 client threads): pg_sleep 50 ms x 160:
+  8404/8390, 4255/4216, 2177/2174, 1244/1252, 987/991 ms for pools 1/2/4/8/16; CPU query
+  (500k-row series) x 40: 5283/5333, 3327/3273, 2037/1944, 1801/1724, 1870/1885 ms. A first
+  heavier CPU run (1.5M rows x 120, one run, since reduced because it took 2 minutes) gave
+  53217, 27833, 17931, 14815, 22005 ms, pool 16 slower than 8; the lighter batch showed the
+  plateau but not the slowdown.
+  Finding: the Micrometer gauge `hikaricp.connections.active` stayed at 5 for 732 ms after a
+  burst; HikariCP 7.0.2 builds its PoolStats with a 1 s refresh (read from the class files), it
+  is not a leak (53 ms and 732 ms to reach 0 in two bursts).
+  Live on the lab stack (`labs/database/pool-lab.sh`, pool 10, wait 3 s, hold 1000 ms): 10
+  requests: 10 x 200; 40 requests: 40 x 200 in three runs (the last group waited about 3.0 s,
+  at the timeout, my prediction of failures was wrong); 60 requests: 40 x 200 and 20 x 503 in
+  all three runs; 40 requests held 100 ms: 40 x 200; a single request after the burst: 200.
+  Wall times include about 1 s of `docker exec` overhead. Guidebook
+  `guidebooks/19-connection-pooling.md`.
+  Limits: only the warehouse pool is bounded; no statement timeout; no `max_connections`
+  experiment; the CPU result depends on the machine; CI has not run on this branch.
+- 2026-11-03: unit 7.6 (N+1 queries) `VERIFIED`. No new dependency. The N+1 was in existing code:
+  `GET /api/v1/products` (`ProductRepository.searchAll`) returned a page of `Product` with
+  lazy `category` and `unit`, and `ProductResponse.from` read both for every product.
+  `ProductListQueryCountTest` (Hibernate statistics, `generate_statistics=true`, 30 products
+  that each have their own category and unit so the persistence context cannot share them)
+  failed first against the unchanged query: 62 statements for a page of 30 (1 page + 1 count +
+  30 category + 30 unit) and 12 for a page of 5. Fix: `@EntityGraph(attributePaths =
+  {"category", "unit"})` on `searchAll`, JPQL unchanged. After: 2 statements for a page of 5
+  and for a page of 30. Counts of statements, not durations.
+  Mistake caught by the suite: the new test inserted 30 categories and 30 units into the shared
+  singleton database and broke `CatalogRepositoryTest.seedDataIsVisibleThroughJpa` (categories
+  and units are asserted to be exactly 2); the assertion was kept and the new test now deletes
+  what it created. catalog-service `clean verify`: 63 tests, 0 failures.
+  Live smoke test only (no lab): after rebuilding the catalog container, the list through the
+  gateway returned the 3 products with category and unit codes, and a filtered list
+  (`categoryId=1&active=true&search=spk`) returned SPK-X1.
+  Guidebook `guidebooks/20-n-plus-one.md`. Limits: `GET /products/{id}` still costs 3 statements
+  for one product (fixed, not N+1, hidden by the cache on a hit); no timing claim; no compose
+  lab for this unit; CI has not run on this branch.
+- 2026-11-03: unit 7.7 (indexes and EXPLAIN ANALYZE) `VERIFIED`. No new dependency. Catalog
+  Flyway V3 `product_indexes`: btree `products_category_id_idx`, GIN `gin_trgm_ops` indexes
+  `products_name_trgm_idx` on `lower(name)` and `products_sku_trgm_idx` on `lower(sku)`,
+  `CREATE EXTENSION IF NOT EXISTS pg_trgm`. Evidence is `ProductIndexPlanTest`: its own
+  postgres:16.15-alpine container, the catalog migrations, 200,000 products in 100 categories
+  (2,000 each, "dense") plus a "rare" category of 50 stored last; the statements are the ones
+  Hibernate sends for the product list and count (captured with `show-sql`), parameters bound
+  as `$1..$4`; every plan is a real `EXPLAIN (ANALYZE, BUFFERS)`, the time is the median of 5
+  runs after a warm-up; stages: V2 only, hand-made `category_id` index, trigram indexes, then
+  the real migration V3 (same plans). Two runs of the class (run 1 / run 2), no index against V3:
+  count of the dense category 26.5 / 34.6 ms against 3.7 / 6.1 ms; list of the rare category
+  33.5 / 35.3 against 0.20 / 0.30; list with search `f00ba` 328 / 361 against 0.68 / 1.03;
+  count with that search 160 / 203 against 0.57 / 0.55; list of the dense category 0.45 / 0.41
+  against 1.4 / 2.1 (slower: the `Limit` let the sequential scan stop after about 2,000 rows).
+  The btree on `category_id` left the search plans unchanged (328 ms against 328 ms); with a
+  forced generic plan the catch-all list stays a Seq Scan even with the index; with the default
+  `plan_cache_mode = auto` the count used the index in all 10 executions in both runs. The
+  exploratory first version of the lab (the same data without the rare category and the
+  migration stage) gave the same plan types and, for the baseline, 365 ms (list with the search) and 38 ms (count of the dense category).
+  catalog-service `clean verify`: 68 tests, 0 failures.
+  Live: the V3 migration ran at start of the rebuilt `catalog` and `catalog-2` as the
+  non-superuser `catalog_app`: `flyway_schema_history` versions 1 to 3 successful, the five
+  indexes of `products` present, `pg_trgm 1.6` installed. Search (`search=SPK`) and category
+  filter answered correctly straight from both instances; through the gateway the same request
+  returned 503 for the first minute after both catalog instances were restarted together and 200
+  in 6 of 6 tries after that (consistent with the open item "gateway registry after restart",
+  not investigated).
+  Guidebook `guidebooks/21-indexes-and-explain-analyze.md`. Limits: index sizes, write
+  overhead and build time not measured; nothing on `unit_id`; search terms shorter than 3
+  characters not measured; one dataset shape; plain `CREATE INDEX` (no `CONCURRENTLY`, unit 7.9);
+  no compose-scale dataset (the live database holds 3 products); CI has not run on this branch.
+- 2026-11-03: unit 7.8 (foreign key and unique constraints) `VERIFIED`. No new dependency, no
+  new migration (the constraints already exist). The gap found: the
+  `DataIntegrityViolationException` handler of warehouse-service and catalog-service told every
+  violation "The request violates a unique constraint" (title "Duplicate resource"), also
+  foreign key and check violations. Test first: `ConstraintTest.foreignKeyViolationIsNotReportedAsAUniqueViolation`
+  failed with `expected: "Reference conflict" but was: "Duplicate resource"`. Fix: read the SQLSTATE
+  of the root cause; 23505 stays Duplicate resource, 23503 is Reference conflict, any other is a
+  generic Constraint violation, all 409; same change and `ConstraintErrorMappingTest` (2 tests)
+  in catalog-service.
+  `ConstraintTest` (6 tests incl. the inherited context test) on the real container: 12
+  simultaneous creates of one warehouse code gave 1 x 201 and 11 x 409, one row; 9 of the 11
+  refusals came from the unique constraint after the `existsByCode` pre-check had passed, 2 from
+  the pre-check. Eight threads that check then insert on a table without a constraint inserted 8
+  rows for one sku, with `UNIQUE` 1 inserted and 7 refused with 23505. Deleting a location that
+  has stock gave 23503. A delete of a location while an insert of its stock row was uncommitted
+  stayed blocked (still running after 500 ms, 1 backend waiting on a lock in `pg_stat_activity`)
+  and failed with 23503 after the commit. warehouse-service `clean verify`: 77 tests, catalog-service:
+  70 tests, 0 failures.
+  Live on the lab stack (`labs/database/constraint-lab.sh`, 20 simultaneous creates of one
+  code straight at the warehouse): 1 x 201, 19 x 409, 0 other, 1 row, in each of 3 runs. The lab
+  leaves 3 `LAB-<timestamp>` warehouses in the compose database (demo data, like the earlier lab
+  rows). Guidebook `guidebooks/22-foreign-key-and-unique-constraints.md`.
+  Mistake caught by a hook: a zero-width space (U+200B) had slipped into a test method name;
+  removed, and a scan of the sources for zero-width characters found none.
+  Limits: 409 for every constraint violation (a check or not-null violation arguably means a
+  validation gap and could be a 400 or 500); the foreign key race is shown with SQL, not through
+  the HTTP API; `ON DELETE CASCADE` and deferred constraints not explored; CI has not run on
+  this branch.
+- 2026-11-03: unit 7.9 (zero-downtime migrations) `VERIFIED`. No new dependency. warehouse-service
+  Flyway V5 (expand: `warehouses.street_address`, two-way sync trigger `warehouses_sync_address`,
+  backfill) and V6 (contract: drop trigger, function and `address`); `Warehouse.address` maps to
+  the column `street_address`, the API field stays `address`. In a real rollout V6 ships a release
+  later; in this one-environment lab one deploy applied V5 and V6.
+  `ZeroDowntimeMigrationTest` (6 tests, own postgres:16.15-alpine container, real migrations in
+  staged order via Flyway `target`, the SQL of the old and the new release): before V5 the new
+  release fails with 42703; after V5 both releases read and write and the columns follow each
+  other (insert, update, update to NULL, both columns set differently: the new one wins; existing
+  rows backfilled with no difference); after V6 the new release works with the data intact and the
+  old release's SQL fails with 42703. The two stage tests ran red first against a build without
+  V5 and V6 (`No migration with a target version 5 could be found`, `bad SQL grammar`).
+  Lock queue: with T1 holding a transaction that read the table for about 3 s and an
+  `ALTER TABLE ... ADD COLUMN` waiting, a later plain SELECT waited 2862 and 2858 ms (2 backends
+  waiting on a lock in pg_stat_activity); with `lock_timeout = 500` the ALTER failed with 55P03
+  and the SELECT waited 323 and 324 ms. Index build on 1,000,000 rows with a writer at up to
+  about 200 inserts per second: plain `CREATE INDEX` 1738 / 1106 ms with the slowest insert 1717 /
+  1079 ms (a third full-suite run: 1242 ms); `CREATE INDEX CONCURRENTLY` 2323 / 1452 ms with the
+  slowest insert 333 / 164 ms (228 ms in the third run). `CREATE INDEX CONCURRENTLY` inside a
+  transaction fails with 25001.
+  Two problems on the way, both mine to report: (1) the first runs of the experiment tests hung.
+  Cause: Flyway's default transactional advisory lock keeps one of its connections idle in
+  transaction, and `CREATE INDEX CONCURRENTLY` waits for every older transaction forever
+  (`pg_stat_activity`: the build waiting on a `virtualxid` for 8+ minutes); `@Timeout` did not
+  free the blocked JDBC call, so I killed the test JVM twice and removed the leftover container.
+  Fix: `flyway.postgresql.transactional.lock=false` for that migration. (2) My first lock
+  measurement timed the reader after T1's commit instead of inside the reader (it printed 2865 ms
+  where the reader had waited 323 ms); corrected.
+  warehouse-service `clean verify`: 83 tests, 0 failures.
+  Live on the compose database: before, columns `address` and 6 warehouses; after rebuilding the
+  warehouse container Flyway applied V5 and V6 (history rows 4, 5, 6 successful), `address` and
+  the trigger are gone, the 6 values (WH-JKT01 `Jl. Logistik Raya No. 1, Jakarta` and the others)
+  are in `street_address`; through the gateway GET, PATCH and POST/GET of a warehouse return the
+  `address` field. The gateway answered 503 for roughly the first minute after the warehouse
+  restart, then 200 (the same transient seen after the catalog restarts of unit 7.7; the open item
+  "gateway after restart" now reproduced three times, not fixed). Guidebook
+  `guidebooks/23-zero-downtime-migrations.md`.
+  Limits: no live rolling deploy with two real releases at once (the compatibility is proven with
+  the SQL of both releases against the real schema); batched backfill and `NOT NULL ... NOT VALID`
+  are described, not run; the table is tiny; one machine; CI has not run on this branch.
+- 2026-11-03: unit 7.10 (read replicas and replication lag) `VERIFIED` on real primary/replica
+  infrastructure (the ROADMAP condition). No new dependency, no change to the services: the
+  replica lab is separate infrastructure. Compose profile `replica` in `compose.labs.yaml`:
+  `pg-primary` (postgres:16.15-alpine, `labs/database/replica/01-replication.sh` creates the role
+  `replicator` and the `pg_hba` entry) and `pg-replica` (`replica-entrypoint.sh`: `pg_basebackup
+  -R -X stream`, then a hot standby, `application_name=lab_replica`); the lab roles reuse
+  `POSTGRES_SUPER_PASSWORD`. A one-line `.gitattributes` (`*.sh text eol=lf`) was added because the
+  scripts are mounted into Linux containers and a CRLF checkout would break them (it also covers
+  the existing `infrastructure/postgres/init` scripts; no existing file changed).
+  `ReplicationLagTest` (4 tests, two Testcontainers containers on one network, the same scripts):
+  the standby is in recovery and `pg_stat_replication` shows `lab_replica` `streaming` `async`;
+  an INSERT on the standby fails with 25006 and the row is not on the primary; a committed row
+  was visible on the standby after 49, 56, 40, 41, 41 ms (new connection for each poll) and 65, 21,
+  28, 111, 44 ms (one persistent connection per database); with `pg_wal_replay_pause()` on the
+  standby a row written on the primary is on the primary (1) and not on the standby (0), replay lag
+  192 bytes, the standby has not reached the write's LSN after 500 ms, and after
+  `pg_wal_replay_resume()` it reached it in 25 ms and 2 ms in the two runs, then returns 1.
+  Compose lab (`labs/database/replica-lab.sh`, two runs): same streaming state, same 25006 error;
+  visible on the standby 104, 105, 102, 100, 105 ms and 289, 210, 191, 225, 91 ms after the commit
+  (polling over the Docker network inside one exec in the primary container; resolution about one
+  psql connection, 90 to 100 ms, so the replication delay is below what that method can resolve);
+  paused standby: primary 1, standby 0, lag 192 bytes, LSN not reached; after the resume the LSN was
+  reached within 246 and 230 ms (includes the resume call and the polling resolution), standby
+  returns 1.
+  Mistakes of mine on the way, all fixed before any number was kept: the first test version never
+  started the standby because its wait pattern said "read only" while PostgreSQL logs "read-only"
+  (found by starting the compose profile and reading the standby log); the first compose timings
+  (1.3 to 1.6 s, then about 1 s) measured `docker exec` start-up, not replication; the first test
+  timings used a new JDBC connection per poll; the AssertJ call `allSatisfy` does not exist for
+  `long[]` (compile error). warehouse-service `clean verify`: 87 tests, 0 failures.
+  Guidebook `guidebooks/24-read-replicas-and-replication-lag.md`. Limits: asynchronous replication
+  only (no synchronous mode, no failover, no replication slots); idle database on one machine; no
+  conflict between a long replica query and replay; the services do not route reads to the replica
+  (no second DataSource); the lab replica data is throwaway; CI has not run on this branch (the test
+  needs Docker with network support).
+- 2026-11-03: unit 7.11 (sharding and partitioning) `VERIFIED` as two isolated experiments, as the
+  ROADMAP asks; neither the services' schema nor the compose stack uses partitioning or sharding. No
+  production code, no new dependency. `PartitioningTest` (6 tests, own container): `lab_events`,
+  1,200,000 rows range-partitioned by month on `created_at` (12 partitions plus a default one), a flat
+  twin with the same rows and an index on `created_at`, a hash-partitioned table. A filter on one day
+  read exactly 1 partition; a filter on other columns read 13 tables; timings of the one-day query:
+  0.86 ms partitioned against 2.48 ms flat in run 1 and 3.02 against 3.10 ms in run 2 (no stable
+  difference), of the other-columns query 70.6 / 90.3 ms and 82.0 / 78.7 ms (no difference); removing
+  January (101,927 rows): `DELETE` 138 and 137 ms against `DETACH PARTITION` + `DROP TABLE` 19 and
+  21 ms; `PRIMARY KEY (id)` on the partitioned table refused with 0A000, `(id, created_at)` accepted;
+  insert outside every range 23514 without a default partition and into the default one with it; 100,000
+  ids over 4 hash partitions: 24,925, 24,971, 24,978, 25,126. `ShardingTest` (7 tests, two PostgreSQL
+  containers as shards, a CRC32 mod 2 router in the test): 10,000 accounts 5,001 and 4,999; lookup by id
+  asked 1 shard, by email 2; the same email existed twice across the shards while a second insert on one
+  shard failed with 23505; a cross-shard transfer with a crash between the two commits left 170 of 200,
+  a compensating credit restored 200; the same transfer inside one shard rolled back to 200; resharding
+  2 to 3 shards over 100,000 keys moved 66.7 % of the keys with modulo and 30.4 % with a hash ring
+  (128 points per shard).
+  Mistake of mine: the first run of `ShardingTest` failed 3 of 7 because the tests share the shard
+  databases and JUnit's method order is not fixed (an exact-count assertion saw rows of other tests, two
+  others ran before their data existed); fixed with `@Order`, assertions unchanged. warehouse-service
+  `clean verify`: 100 tests, 0 failures. Guidebook `guidebooks/25-sharding-and-partitioning.md`.
+  Limits: the timing difference of partitioning on this data set is within noise, only plan shape and
+  retention are claimed; no resharding or rebalancing under traffic; no cross-shard consistent read; no
+  distributed transaction (none claimed); no compose lab; CI has not run on this branch.
+  All eleven Phase 7 units have evidence; the Phase 7 gate review (CI on the whole branch) is still to do.
+
+## Phase 7 gate review (2026-11-03, closing Phase 7)
+
+CI evidence for the whole Phase 7 branch: GitHub Actions run 41661725957 (pull_request event, PR 5) on
+commit `fce2195`, matched to the PR head sha before use, concluded success with 4 of 4 matrix jobs
+passing (warehouse-service 100 tests, catalog-service 70, api-gateway 59, discovery-server 1; 0
+failures). Locally the same commit gave warehouse-service 100 and catalog-service 70 tests, 0 failures.
+
+| Unit | Topic | Guidebook | Evidence in the code |
+|---|---|---|---|
+| 7.1 | Race condition, lost update | 15 | `StockRaceConditionTest`, `labs/database/race-lab.sh` |
+| 7.2 | Optimistic and pessimistic locking | 16 | `StockLockingTest`, same lab script |
+| 7.3 | Deadlock | 17 | `StockDeadlockTest`, `labs/database/deadlock-lab.sh` |
+| 7.4 | Transactions, ACID, isolation levels | 18 | `IsolationLevelTest` |
+| 7.5 | Connection pooling | 19 | `ConnectionPoolTest`, `PoolSizingTest`, `DataSourceConfigTest`, `labs/database/pool-lab.sh` |
+| 7.6 | N+1 queries | 20 | `ProductListQueryCountTest` (catalog) |
+| 7.7 | Indexes, EXPLAIN ANALYZE | 21 | `ProductIndexPlanTest` (catalog), migration V3 |
+| 7.8 | Foreign key and unique constraints | 22 | `ConstraintTest`, `ConstraintErrorMappingTest`, `labs/database/constraint-lab.sh` |
+| 7.9 | Zero-downtime migrations | 23 | `ZeroDowntimeMigrationTest`, migrations V5 and V6 |
+| 7.10 | Read replicas, replication lag | 24 | `ReplicationLagTest`, compose profile `replica`, `labs/database/replica-lab.sh` |
+| 7.11 | Sharding and partitioning | 25 | `PartitioningTest`, `ShardingTest` (isolated experiments) |
+
+Acceptance criteria:
+
+- Each topic has a separate guidebook and lab with commands, expected outcome and trade-offs: `VERIFIED` for
+  the guidebook, lab or test, commands and trade-offs (guidebooks 15 to 25). Partly: prerequisites are not a
+  section of each guidebook; they are the README prerequisites (Java, Docker, `.env`) plus the commands in each
+  guidebook's reproduction section.
+- Concurrency tests use real PostgreSQL via Testcontainers: `VERIFIED` (postgres:16.15-alpine in every test of the
+  list above; the replica and shard labs use several containers).
+- The race condition lab shows the bug before the fix and asserts invariants after: `VERIFIED` (7.1: the safe
+  tests failed against the read-modify-write with 100 of 100 accepted for a stock of 50 and with a total of 208;
+  after the fix accepted plus left equals the stock).
+- The deadlock lab is bounded by a timeout and verifies rollback and recovery: `VERIFIED` (7.3: the deadlock
+  was resolved in 1541 ms, the test bounds it at 10 s, the loser's rollback left only the winner's unit, and the
+  retry restored the totals).
+- EXPLAIN ANALYZE output comes from the actual query and dataset: `VERIFIED` (7.7: the statements Hibernate sends,
+  captured with show-sql, on 200,000 products; no plan was written by hand).
+- Index claims compare actual plans and measured results: `VERIFIED` (7.7, two runs, including the cases where an
+  index did not help or made one query slower).
+- Zero-downtime migrations use expand, migrate, contract and explain backward compatibility: `VERIFIED` (7.9:
+  V5 and V6, the SQL of the old and the new release tested at every step, guidebook 23).
+- Read replica and replication lag labs use actual primary and replica infrastructure: `VERIFIED` (7.10: a real
+  streaming standby in both the compose profile and Testcontainers).
+- Sharding and partitioning are isolated experiments, not core architecture: `VERIFIED` (7.11: test code only;
+  the services and the compose stack use neither).
+
+Open items and carried notes:
+
+1. The gateway answered 503 for about a minute after a downstream service was restarted (seen after the catalog
+   restarts of unit 7.7 and the warehouse restart of 7.9; the same symptom was noted in Phase 5); not investigated, not fixed.
+2. Only the warehouse connection pool is bounded (10 connections, 3 s wait); the catalog still uses the HikariCP
+   defaults (30 s wait). No statement timeout anywhere.
+3. Every constraint violation is answered with 409; a check or not-null violation could rather be a 400 or 500.
+4. The lab endpoints (`withdraw-unsafe`, `-optimistic`, `-pessimistic`, `transfer-unordered`, `lab/hold`) ship in
+   the warehouse artifact and exist only with `stockflow.lab.unsafe-stock=true`; a test proves they are off by
+   default, but no test proves the production profile cannot switch them on.
+5. V5 and V6 (expand and contract) were applied by one deploy in this single-environment lab; in a real rollout V6
+   ships a release later.
+6. The services do not read from a replica; no rolling deploy with two live releases was run; sharding has no
+   rebalancing under traffic.
+7. Timings are single-machine measurements (one to three runs), not benchmarks; some were noisy and the
+   guidebooks say which claims rest on plan shape instead.
+8. Carried from earlier phases: Spring Boot 3.5 and Spring Cloud 2025.0 past OSS support; core Redis has no
+   `maxmemory`; one shared HS256 secret in three services; demo rows left in the compose databases (warehouses
+   `LAB-*`, `MIG-*`, `AUTH-*`, `LIVE-WH`, stock rows).
+
+Phase 7 overall: `VERIFIED`, gate closed, with the open items above.

@@ -462,6 +462,8 @@ uses multiple app instances and shared Redis.
 
 ### Phase 7 --- Database engineering labs
 
+Status: `VERIFIED` 2026-11-03 - units 7.1 to 7.11 and the gate review in `docs/STATUS.md` (Phase 7 gate review), CI run 41661725957 on PR 5 (4 of 4 jobs passing). Guidebooks `15-race-condition.md` to `25-sharding-and-partitioning.md`. Open items: gateway 503 after a downstream restart, unbounded catalog pool and no statement timeout, lab endpoints shipped behind a property.
+
 **Topics** - Race conditions, deadlocks, transactions, ACID, isolation
 levels. - Optimistic and pessimistic locking. - Connection pooling. -
 N+1 queries, indexes, query optimization, EXPLAIN ANALYZE. - Foreign-key

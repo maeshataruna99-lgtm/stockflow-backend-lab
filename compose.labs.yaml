@@ -17,6 +17,11 @@ services:
     environment:
       LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_CLOUD_GATEWAY_HANDLER: DEBUG
 
+  # race condition lab (unit 7.1): switches on the deliberately broken withdraw endpoint, never in the core file
+  warehouse:
+    environment:
+      STOCKFLOW_LAB_UNSAFE_STOCK: "true"
+
   catalog-2:
     build: ./apps/catalog-service
     image: stockflow/catalog-service:0.0.1-SNAPSHOT
@@ -64,5 +69,47 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    networks:
+      - stockflow
+
+  # Replica lab (unit 7.10): a PostgreSQL primary and a streaming-replication standby of it, separate from the core
+  # `postgres` so the experiments cannot touch the service databases. No host ports; reach them with `docker compose
+  # exec`. Not started by default: docker compose -f compose.yaml -f compose.labs.yaml --profile replica up -d
+  # The lab roles reuse POSTGRES_SUPER_PASSWORD (throwaway data, internal network only).
+  pg-primary:
+    image: postgres:16.15-alpine
+    profiles: ["replica"]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_SUPER_PASSWORD:?set POSTGRES_SUPER_PASSWORD in .env}
+    volumes:
+      - ./labs/database/replica/01-replication.sh:/docker-entrypoint-initdb.d/01-replication.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    networks:
+      - stockflow
+
+  pg-replica:
+    image: postgres:16.15-alpine
+    profiles: ["replica"]
+    entrypoint: ["sh", "/replica-entrypoint.sh"]
+    environment:
+      PRIMARY_HOST: pg-primary
+      REPLICATION_PASSWORD: ${POSTGRES_SUPER_PASSWORD:?set POSTGRES_SUPER_PASSWORD in .env}
+    volumes:
+      - ./labs/database/replica/replica-entrypoint.sh:/replica-entrypoint.sh:ro
+    depends_on:
+      pg-primary:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 10s
     networks:
       - stockflow
