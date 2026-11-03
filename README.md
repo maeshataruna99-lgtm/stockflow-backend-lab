@@ -42,8 +42,15 @@ Key documents:
   2026-10-28 (gate closed; multi-stage non-root Dockerfiles, full
   six-service compose stack with internal network, Eureka registration,
   health checks, restart and volume-preservation evidence).
-- Phases 5-10: NOT STARTED. Gateway use cases, caching, demo auth, Kubernetes,
-  hardening follow the ROADMAP order.
+- Phase 5 - API gateway and its ten use cases: IN PROGRESS. All ten units are
+  implemented and verified locally (dynamic routing, JWT authentication and
+  roles, Redis rate limiting, circuit breaker, load balancing, timeout and
+  GET-only retry, request ID, tracing in logs, one error contract, API
+  versioning; 57 gateway tests). The gate is not closed: CI has not run on
+  units 5.4-5.10, and the catalog and warehouse services do not enforce
+  authorization themselves (details in [docs/STATUS.md](docs/STATUS.md)).
+- Phases 6-10: NOT STARTED. Caching, database, resilience, messaging and
+  observability labs follow the ROADMAP order.
 
 ## Prerequisites
 

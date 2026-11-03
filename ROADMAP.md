@@ -333,8 +333,8 @@ counts identical 2/2/2/2 and 1/3; container restart with volume
 persistence also proven in unit 2.1). - [x] Catalog and warehouse roles
 cannot write to each other's database (four real psql connections:
 cross-database CONNECT denied both ways, same-database create/insert/drop
-succeeds both ways). - [ ] Root user is not seeded in production profile
-(deferred with the seeding itself to Phase 5, ADR 0003). - [x] No actual
+succeeds both ways). - [x] Root user is not seeded in production profile
+(gateway only, no database seeding; closed by the Phase 5 review in docs/STATUS.md). - [x] No actual
 secret appears in repository or logs (`password: ${...}` with no default
 fails fast; `.env` gitignored, random passwords never echoed;
 `.env.example` holds placeholders only).
@@ -345,8 +345,8 @@ migrated from version 0). - [x] Inspect migration history and seed row
 counts (psql outputs recorded in docs/STATUS.md). - [x] Restart and
 verify state remains stable (container restart + second service run;
 row counts unchanged). - [x] Test database role permissions (isolation
-proof above). - [ ] Test production profile does not create the demo
-root user (Phase 5, ADR 0003).
+proof above). - [x] Test production profile does not create the demo
+root user (ProductionProfileSecurityTest, Phase 5 review).
 
 ### Phase 3 --- MVC/JPA/JPQL master data APIs
 
@@ -413,8 +413,9 @@ CI runs 40674415027 and 40674854953 all green).
 
 ### Phase 5 --- API Gateway and ten gateway use cases
 
-Status: `IN PROGRESS` (Units 5.1-5.3 `VERIFIED` on 2026-10-29, 5.4-5.10 on 2026-11-03; evidence in
-`docs/STATUS.md`).
+Status: `IN PROGRESS` (all ten units `VERIFIED`: 5.1-5.3 on 2026-10-29, 5.4-5.10 on 2026-11-03).
+Gate review 2026-11-03 is written up in `docs/STATUS.md` and the gate is NOT closed: CI has not run on
+units 5.4-5.10, and catalog and warehouse do not enforce authorization themselves (open decision).
 
 Implement and test these individually:
 

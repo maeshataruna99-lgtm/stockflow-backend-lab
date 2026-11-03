@@ -41,7 +41,7 @@ documentation with an opt-in hostdev override (unit 4.3); gate review
 below. Phase 5 - API gateway and its ten use cases: `IN PROGRESS` - units 5.1
 (Dynamic Routing), 5.2 (JWT Authentication & Role Authorization) and 5.3
 (Redis-backed rate limiting) `VERIFIED` (evidence below; 5.3 against real
-Redis on 2026-11-03); unit 5.4 (circuit breaker) `VERIFIED` 2026-11-03; 5.5 (load balancing) `VERIFIED` 2026-11-03; 5.6 (timeout and retry) `VERIFIED` 2026-11-03; 5.7 (request ID) `VERIFIED` 2026-11-03; 5.8 (tracing) `VERIFIED` 2026-11-03; 5.9 (error contract) `VERIFIED` 2026-11-03; 5.10 (API versioning) `VERIFIED` 2026-11-03; all ten Phase 5 units are verified, the Phase 5 gate review and the ADR 0003 root-user obligation are next.
+Redis on 2026-11-03); unit 5.4 (circuit breaker) `VERIFIED` 2026-11-03; 5.5 (load balancing) `VERIFIED` 2026-11-03; 5.6 (timeout and retry) `VERIFIED` 2026-11-03; 5.7 (request ID) `VERIFIED` 2026-11-03; 5.8 (tracing) `VERIFIED` 2026-11-03; 5.9 (error contract) `VERIFIED` 2026-11-03; 5.10 (API versioning) `VERIFIED` 2026-11-03; all ten Phase 5 units are verified; the Phase 5 gate review (below) found it not closable yet.
 Phase 0 evidence below remains the gate.
 
 ## Last verified commit
@@ -1033,3 +1033,95 @@ configuration question.
   and removed later; `/api/<unknown>` is rewritten to `/api/v1/<unknown>` and
   fails at the downstream with its own 404.
   Full gateway suite `clean verify`: 55 tests, 0 failures (one run).
+
+## Phase 5 gate review (2026-11-03, NOT CLOSED)
+
+Every ROADMAP Phase 5 criterion checked against recorded evidence only. All
+ten units are `VERIFIED` individually; the gate stays open for the reasons
+under "Open items".
+
+Per-unit acceptance criteria (guidebook, request collection, normal and
+failure path, expected results, automated test, evidence):
+
+| Unit | Guidebook | Requests | Automated tests | Live evidence |
+| --- | --- | --- | --- | --- |
+| 5.1 Dynamic routing | 01 | gateway-dynamic-routing.http | DynamicRoutingGatewayTest 9 | health, routes |
+| 5.2 JWT and roles | 02 | gateway-jwt-auth.http | JwtAuthenticationGatewayTest 9, ProductionProfileSecurityTest 1, JwtServiceTest 2 | login 200 / old default 401 |
+| 5.3 Rate limiting | 03 | gateway-rate-limiting.http | RateLimitingGatewayTest 2, UserOrIpKeyResolverTest 4 | real Redis: 21x 429 of 80; later 40x 429 of 80 |
+| 5.4 Circuit breaker | 04 | gateway-circuit-breaker.http | CircuitBreakerGatewayTest 3 | catalog stopped: 503, recovery 200 |
+| 5.5 Load balancing | 05 | gateway-load-balancing.http | LoadBalancingGatewayTest 1 | two containers, 10 and 10 of 20 |
+| 5.6 Timeout and retry | 06 | gateway-retry-timeout.http | RetryTimeoutGatewayTest 4 | failover 12/12, hung downstream 503 in 3.4 s |
+| 5.7 Request ID | 07 | gateway-request-id.http | RequestIdGatewayTest 5 | header checks |
+| 5.8 Tracing | 08 | gateway-tracing.http | TracingGatewayTest 2 | same trace id in gateway and catalog logs |
+| 5.9 Error contract | 09 | gateway-error-contract.http | ErrorContractGatewayTest 6 | 404, 401, 429, 503 bodies |
+| 5.10 API versioning | 10 | gateway-api-versioning.http | ApiVersioningGatewayTest 6 | v1, alias, no token, v9 |
+
+Special safeguards:
+
+- No automatic retry of non-idempotent writes: `VERIFIED` (RetryTimeoutGatewayTest
+  POST sent once; retry is GET only).
+- A fallback never reports a write as successful: `VERIFIED` (CircuitBreakerGatewayTest
+  failed POST returns 503, sent once; live POST during the outage 503).
+- Internal Actuator, Eureka and administrative endpoints are not publicly routed:
+  `VERIFIED` live on 2026-11-03 against the rebuilt stack. Through the gateway,
+  `/actuator/env`, `/actuator/metrics`, `/actuator/gateway/routes`, `/eureka/apps`,
+  `/api/v1/actuator/health`, `/api/actuator/health` and `/api/v1/eureka/apps` all
+  returned 404 with and without a token. Only `/actuator/health` and
+  `/actuator/info` of the gateway itself answer 200 (its own endpoints, by
+  design). Published host ports: gateway 127.0.0.1:8080 and discovery
+  127.0.0.1:8761 only.
+- Rate-limit keys do not trust client headers: `VERIFIED` (UserOrIpKeyResolverTest,
+  spoofed `X-User-Id` ignored).
+- Load balancing used two real instances with observed distribution: `VERIFIED`
+  (unit 5.5).
+
+Defect found and fixed during this review: `application.yml` still carried the
+three unit 5.1 routes, so the running jar had six routes, each id twice, and
+the yml copies had no rate limiter, breaker or retry. The Java routes won only
+by list order. Found by starting the built jar and reading
+`/actuator/gateway/routes` (6 routes; the yml copies listed with no filters).
+The tests could not see it because `src/test/resources/application.yml`
+shadows the main file. Fix: the yml routes were removed; `RouteDefinitionTest`
+(2 tests) asserts unique route ids with at least 5 filters each and that the
+main `application.yml` defines no routes (it failed on the yml test before the
+fix). After the fix the real jar lists 3 routes. Full gateway suite: 57 tests,
+0 failures.
+
+ADR 0003 obligations carried from Phase 2:
+
+- Root user not seeded in the production profile: `VERIFIED` for the gateway,
+  the only place an account exists. There is no database seeding of users; the
+  root and demo accounts live in memory, built from `ROOT_USERNAME`,
+  `ROOT_PASSWORD`, `DEMO_USER_PASSWORD` (environment only, no defaults,
+  BCrypt hashed). `ProductionProfileSecurityTest` shows `/api/v1/auth/login`
+  returns 404 under `prod`.
+- The same test is the "production profile does not create the demo root
+  user" check.
+- Gap: ADR 0003 and ROADMAP section 2 say every service must still enforce
+  authorization where appropriate. Catalog and warehouse contain no security
+  code; they trust the gateway. They are not published to the host, so they
+  are reachable only on the Docker network `stockflow`, but any container on
+  that network can call them without a token. This is an open item (below).
+
+Re-run of all builds on 2026-11-03: api-gateway 57, catalog-service 19,
+warehouse-service 17, discovery-server 1 tests, all with 0 failures,
+`clean verify` BUILD SUCCESS on each (one run each, Windows, JDK 21).
+
+Observation: right after a gateway restart, the first request to a route can
+return 503 for a short time (observed once for `/api/v1/warehouses`, about
+45 s after start) because the gateway reports healthy before it has loaded the
+Eureka registry; it returned 200 on the next attempt. The compose health check
+does not cover this. Not fixed.
+
+Open items (why the gate is not closed):
+
+1. CI has not run on units 5.4-5.10 or the fixes in this review: the work is on
+   the local branch `feat/gateway-circuit-breaker`, not pushed. Earlier gates
+   closed with a recorded green Actions run; this one needs the same.
+2. Service-level authorization (ADR 0003 gap above) needs a decision: accept
+   network isolation for the lab and record it in an ADR, or add token or
+   header verification to catalog and warehouse.
+3. Startup readiness of the gateway (observation above), minor.
+4. Carried notes: Spring Boot 3.5 and Spring Cloud 2025.0 are past OSS end of
+   support; tracing has no exporter (Phase 10); the circuit breaker state and
+   load balancer cache are per gateway instance.
