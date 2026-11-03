@@ -1,0 +1,34 @@
+### Request ID and response transformation (unit 5.7)
+### Passwords come from .env.
+
+@gatewayUrl = http://localhost:8080
+
+### 1. Login
+# @name userLogin
+POST {{gatewayUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "demo-user",
+  "password": "<DEMO_USER_PASSWORD from .env>"
+}
+
+@userToken = {{userLogin.response.body.accessToken}}
+
+### 2. No ID sent: the response carries a generated UUID in X-Request-Id,
+### plus X-Content-Type-Options: nosniff, and no Server header.
+GET {{gatewayUrl}}/api/v1/products
+Authorization: Bearer {{userToken}}
+
+### 3. A well-formed ID is kept: the response header is client-trace-42.
+GET {{gatewayUrl}}/api/v1/products
+Authorization: Bearer {{userToken}}
+X-Request-Id: client-trace-42
+
+### 4. A malformed ID (spaces, markup) is replaced by a generated UUID.
+GET {{gatewayUrl}}/api/v1/products
+Authorization: Bearer {{userToken}}
+X-Request-Id: bad id <script>
+
+### 5. A gateway-generated error also carries the ID: 401 without a token.
+GET {{gatewayUrl}}/api/v1/products

@@ -41,7 +41,7 @@ documentation with an opt-in hostdev override (unit 4.3); gate review
 below. Phase 5 - API gateway and its ten use cases: `IN PROGRESS` - units 5.1
 (Dynamic Routing), 5.2 (JWT Authentication & Role Authorization) and 5.3
 (Redis-backed rate limiting) `VERIFIED` (evidence below; 5.3 against real
-Redis on 2026-11-03); unit 5.4 (circuit breaker) `VERIFIED` 2026-11-03; 5.5 (load balancing) `VERIFIED` 2026-11-03; 5.6 (timeout and retry) `VERIFIED` 2026-11-03; unit 5.7 (request ID and transformation) is next.
+Redis on 2026-11-03); unit 5.4 (circuit breaker) `VERIFIED` 2026-11-03; 5.5 (load balancing) `VERIFIED` 2026-11-03; 5.6 (timeout and retry) `VERIFIED` 2026-11-03; 5.7 (request ID) `VERIFIED` 2026-11-03; unit 5.8 (tracing) is next.
 Phase 0 evidence below remains the gate.
 
 ## Last verified commit
@@ -941,3 +941,21 @@ configuration question.
   reached WireMock, consistent with its 300 ms breaker timeout firing on a slow
   cold start); that test's timeout was raised to 1 s and its slow stub to 3 s,
   and the suite then passed twice.
+
+- 2026-11-03: unit 5.7 (request ID and request/response transformation)
+  `VERIFIED`. Tests written first: all 5 new tests failed before the change.
+  Added `RequestIdFilter` (global, highest precedence): keeps a client
+  `X-Request-Id` only if it matches `[A-Za-z0-9._-]{1,64}`, else generates a
+  UUID; forwards it downstream; sets it once on the response in `beforeCommit`
+  so gateway-produced answers (401, 429, 503) carry it. In `protect(...)` the
+  response `Server` header is removed and `X-Content-Type-Options: nosniff`
+  added. `RequestIdGatewayTest`: 5 tests, 0 failures (generated ID visible
+  downstream and in the response; valid client ID kept; malformed ID replaced;
+  401 carries an ID; Server removed and nosniff added). Live on the rebuilt
+  gateway: no ID sent returned a generated UUID, `client-trace-42` came back
+  unchanged, `bad id <x>` was replaced by a UUID, a 401 without token carried an
+  ID, and nosniff was present with no Server header. Single run, local machine.
+  Limits: that the downstream receives the ID is proven by the WireMock test
+  only, because catalog and warehouse do not log it yet (structured logging is
+  Phase 10); the ID is not a W3C trace context (use case 8).
+  Full gateway suite after this unit: `clean verify` 41 tests, 0 failures (one run).
