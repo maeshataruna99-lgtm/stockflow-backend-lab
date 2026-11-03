@@ -290,8 +290,8 @@ the ubuntu-latest label migrates to Ubuntu 26 (informational).
 - [x] Application context tests pass (1 per app, 4 total).
 - [x] Java and dependency versions are pinned (parent 3.5.16, BOM
       2025.0.3, Java 21, wrapper 3.9.16).
-- [ ] CI executes build/tests for every app and fails on a failed
-      build/test - needs a remote and a recorded run.
+- [x] CI executes build/tests for every app and fails on a failed
+      build/test - runs 40642546618 (failed, proves detection), 40642734252 and 40643409693 (green).
 
 **Verification commands**
 - [x] Windows: `mvnw.cmd --batch-mode clean verify` inside each app (all
@@ -413,14 +413,14 @@ CI runs 40674415027 and 40674854953 all green).
 
 ### Phase 5 --- API Gateway and ten gateway use cases
 
-Status: `IN PROGRESS` (Unit 5.1 `VERIFIED` on 2026-10-29; evidence in
+Status: `IN PROGRESS` (Units 5.1, 5.2, and 5.3 `VERIFIED` on 2026-10-29; evidence in
 `docs/STATUS.md`).
 
 Implement and test these individually:
 
 1.  [x] **Dynamic routing** (`VERIFIED` 2026-10-29: `GatewayRoutesConfig` in `apps/api-gateway`, WireMock reactive routing test 10/10 green, `guidebooks/01-dynamic-routing.md`, `playground/http/gateway-dynamic-routing.http`).
-2.  [ ] JWT authentication and role authorization.
-3.  [ ] Redis-backed rate limiting.
+2.  [x] **JWT authentication and role authorization** (`VERIFIED` 2026-10-29: ADR 0006, `JwtAuthenticationFilter`, `JwtService`, `DemoAuthController` with ADR 0003 BCrypt isolation, 10/10 security tests green including prod-isolation, `guidebooks/02-jwt-authentication-authorization.md`, `playground/http/gateway-jwt-auth.http`).
+3.  [x] **Redis-backed rate limiting** (`VERIFIED` 2026-10-29, real-Redis burst check 2026-11-03: `RateLimitProperties`, `UserOrIpKeyResolver` anti-spoofing resolver, `RateLimiterConfig` with reactive Redis RateLimiter, status 429 response, in-memory controllable test rate limiter, 6/6 unit/integration tests green, `guidebooks/03-redis-rate-limiting.md`, `playground/http/gateway-rate-limiting.http`).
 4.  [ ] Circuit breaker and controlled fallback.
 5.  [ ] Discovery-based load balancing with two service instances.
 6.  [ ] Timeout and bounded retry for safe/idempotent operations.

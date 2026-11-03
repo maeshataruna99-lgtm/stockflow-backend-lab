@@ -14,3 +14,18 @@ spring:
 eureka:
   client:
     enabled: false
+
+management:
+  health:
+    redis:
+      enabled: false
+
+
+stockflow:
+  security:
+    jwt:
+      secret: test-only-signing-key-not-a-real-secret-0123456789
+
+# test fixtures for DemoAuthController, which has no defaults
+ROOT_PASSWORD: root_demo_password_123
+DEMO_USER_PASSWORD: user_demo_password_123
