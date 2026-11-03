@@ -1617,3 +1617,38 @@ Phase 6 overall: `VERIFIED`, gate closed, with the open items above.
   Limits: no live rolling deploy with two real releases at once (the compatibility is proven with
   the SQL of both releases against the real schema); batched backfill and `NOT NULL ... NOT VALID`
   are described, not run; the table is tiny; one machine; CI has not run on this branch.
+- 2026-11-03: unit 7.10 (read replicas and replication lag) `VERIFIED` on real primary/replica
+  infrastructure (the ROADMAP condition). No new dependency, no change to the services: the
+  replica lab is separate infrastructure. Compose profile `replica` in `compose.labs.yaml`:
+  `pg-primary` (postgres:16.15-alpine, `labs/database/replica/01-replication.sh` creates the role
+  `replicator` and the `pg_hba` entry) and `pg-replica` (`replica-entrypoint.sh`: `pg_basebackup
+  -R -X stream`, then a hot standby, `application_name=lab_replica`); the lab roles reuse
+  `POSTGRES_SUPER_PASSWORD`. A one-line `.gitattributes` (`*.sh text eol=lf`) was added because the
+  scripts are mounted into Linux containers and a CRLF checkout would break them (it also covers
+  the existing `infrastructure/postgres/init` scripts; no existing file changed).
+  `ReplicationLagTest` (4 tests, two Testcontainers containers on one network, the same scripts):
+  the standby is in recovery and `pg_stat_replication` shows `lab_replica` `streaming` `async`;
+  an INSERT on the standby fails with 25006 and the row is not on the primary; a committed row
+  was visible on the standby after 49, 56, 40, 41, 41 ms (new connection for each poll) and 65, 21,
+  28, 111, 44 ms (one persistent connection per database); with `pg_wal_replay_pause()` on the
+  standby a row written on the primary is on the primary (1) and not on the standby (0), replay lag
+  192 bytes, the standby has not reached the write's LSN after 500 ms, and after
+  `pg_wal_replay_resume()` it reached it in 25 ms and 2 ms in the two runs, then returns 1.
+  Compose lab (`labs/database/replica-lab.sh`, two runs): same streaming state, same 25006 error;
+  visible on the standby 104, 105, 102, 100, 105 ms and 289, 210, 191, 225, 91 ms after the commit
+  (polling over the Docker network inside one exec in the primary container; resolution about one
+  psql connection, 90 to 100 ms, so the replication delay is below what that method can resolve);
+  paused standby: primary 1, standby 0, lag 192 bytes, LSN not reached; after the resume the LSN was
+  reached within 246 and 230 ms (includes the resume call and the polling resolution), standby
+  returns 1.
+  Mistakes of mine on the way, all fixed before any number was kept: the first test version never
+  started the standby because its wait pattern said "read only" while PostgreSQL logs "read-only"
+  (found by starting the compose profile and reading the standby log); the first compose timings
+  (1.3 to 1.6 s, then about 1 s) measured `docker exec` start-up, not replication; the first test
+  timings used a new JDBC connection per poll; the AssertJ call `allSatisfy` does not exist for
+  `long[]` (compile error). warehouse-service `clean verify`: 87 tests, 0 failures.
+  Guidebook `guidebooks/24-read-replicas-and-replication-lag.md`. Limits: asynchronous replication
+  only (no synchronous mode, no failover, no replication slots); idle database on one machine; no
+  conflict between a long replica query and replay; the services do not route reads to the replica
+  (no second DataSource); the lab replica data is throwaway; CI has not run on this branch (the test
+  needs Docker with network support).
