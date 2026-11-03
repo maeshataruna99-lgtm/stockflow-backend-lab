@@ -52,7 +52,7 @@ class CircuitBreakerGatewayTest {
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                     .exchange()
                     .expectStatus().isEqualTo(HttpStatus.SERVICE_UNAVAILABLE)
-                    .expectBody().jsonPath("$.title").isEqualTo("Service unavailable");
+                    .expectBody().jsonPath("$.title").isEqualTo("Service Unavailable");
         }
 
         // the third call was short-circuited, so the downstream saw only the two that opened the circuit
@@ -86,7 +86,7 @@ class CircuitBreakerGatewayTest {
                 .bodyValue("{\"code\":\"WH-X\",\"name\":\"X\"}")
                 .exchange()
                 .expectStatus().isEqualTo(HttpStatus.SERVICE_UNAVAILABLE)
-                .expectBody().jsonPath("$.title").isEqualTo("Service unavailable");
+                .expectBody().jsonPath("$.title").isEqualTo("Service Unavailable");
 
         verify(exactly(1), postRequestedFor(urlEqualTo("/api/v1/warehouses")));
     }
