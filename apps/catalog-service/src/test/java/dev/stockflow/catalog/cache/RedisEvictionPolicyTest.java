@@ -43,6 +43,9 @@ class RedisEvictionPolicyTest {
                         write(commands, "hot:" + h, withTtl);
                     }
                     for (int i = 1; i <= COLD_KEYS; i++) {
+                        if (i % 1000 == 0) {
+                            pauseForRedisClock();
+                        }
                         write(commands, "cold:" + i, withTtl);
                         written = i;
                         if (i % 100 == 0) {
@@ -65,6 +68,19 @@ class RedisEvictionPolicyTest {
             } finally {
                 client.shutdown();
             }
+        }
+    }
+
+    /**
+     * Redis stamps keys with a clock of whole seconds. On a fast machine the whole run fits in about one second,
+     * every key then has the same age and LRU cannot tell hot from cold (it failed that way on CI). Not a wait for
+     * a result: it only lets the clock tick so earlier cold keys are older than the hot reads that follow.
+     */
+    private static void pauseForRedisClock() {
+        try {
+            Thread.sleep(1100);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
     }
 
