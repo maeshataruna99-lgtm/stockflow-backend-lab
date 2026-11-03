@@ -1,0 +1,32 @@
+# Opt-in lab override: a second catalog instance for the load balancing lab (unit 5.5).
+# Use together with the core file:
+#   docker compose -f compose.yaml -f compose.labs.yaml up --build -d
+# It also exposes the metrics endpoint on both catalog instances (internal network only,
+# no host port) so the per-instance request count can be read.
+services:
+  catalog:
+    environment:
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics
+
+  catalog-2:
+    build: ./apps/catalog-service
+    image: stockflow/catalog-service:0.0.1-SNAPSHOT
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/catalogdb
+      CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?set CATALOG_DB_PASSWORD in .env}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics
+    depends_on:
+      postgres:
+        condition: service_healthy
+      discovery:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q http://localhost:8081/actuator/health -O /dev/null"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+    networks:
+      - stockflow
+    restart: unless-stopped
