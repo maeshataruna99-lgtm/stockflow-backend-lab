@@ -53,7 +53,7 @@ Key documents:
   policy lab, stampede lab with single-flight, two catalog instances on one
   Redis; 60 catalog tests, CI run 41628003809 green). Open items are in
   [docs/STATUS.md](docs/STATUS.md).
-- Phase 7 - Database engineering labs: IN PROGRESS (units 7.1 race condition and 7.2 locking
+- Phase 7 - Database engineering labs: IN PROGRESS (units 7.1 race condition, 7.2 locking and 7.3 deadlock
   VERIFIED 2026-11-03, evidence in [docs/STATUS.md](docs/STATUS.md)).
 - Phases 8-10: NOT STARTED. Resilience, messaging and observability
   labs follow the ROADMAP order.

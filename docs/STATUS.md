@@ -1429,3 +1429,25 @@ Phase 6 overall: `VERIFIED`, gate closed, with the open items above.
   Limits: single row only; optimistic gives up about half of the requests under 100-way
   contention on one row, which is the finding, not a tuning target; `lock_timeout` is
   PostgreSQL specific; CI has not run on this branch.
+- 2026-11-03: unit 7.3 (deadlock) `VERIFIED`. No new dependency. warehouse-service gets
+  `POST /api/v1/stock/transfer` (two rows locked in one `ORDER BY id ... FOR UPDATE`
+  statement, ascending id, then two version-bumping UPDATEs; 200/400/404/409) and the lab
+  endpoint `POST /api/v1/stock/transfer-unordered?pauseMillis=` (locks from, `pg_sleep`,
+  locks to; behind `stockflow.lab.unsafe-stock`). `lock_timeout` stays set per transaction.
+  A `PessimisticLockingFailureException` whose root cause has SQLSTATE 40P01 is a 409
+  "Deadlock" problem, other lock failures remain 503 "Row locked". Tests
+  (`StockDeadlockTest` 4 and 2 new in `StockApiTest`): two opposite unordered transfers, one
+  fails with 40P01 and one commits, resolved in 1541 ms (bounded by the test at 10 s); the
+  rows differ from the start only by the winner's unit (rollback complete); retrying the
+  loser with the ordered `transfer` restores 10 and 10; 40 ordered transfers on 16 threads in
+  both directions all succeed, rows end at 100 and 100; a refused or 404 transfer changes
+  nothing. warehouse-service `clean verify`: 54 tests, 0 failures. The deadlock test passed on
+  its first run; there was no earlier red state for the fix, only compile errors before the
+  methods existed.
+  Live on the lab stack (`labs/database/deadlock-lab.sh`, 3 rounds, two opposite transfers
+  at the same moment): unordered: 200 and 409 in every round, rows 9/11, 11/9, 9/11, PostgreSQL
+  logged +1 "deadlock detected" per round; ordered: 200 and 200 in every round, rows 10/10,
+  +0 deadlocks. One run per row, one machine, not a benchmark. Guidebook
+  `guidebooks/17-deadlock.md`.
+  Limits: two rows only; ordering relies on the lock order of one SELECT with ORDER BY;
+  deadlocks from foreign key locks are not covered; CI has not run on this branch.
