@@ -3,6 +3,7 @@ package dev.stockflow.catalog.repository;
 import dev.stockflow.catalog.domain.Product;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -24,6 +25,9 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
      * as bytea and failed with "function lower(bytea) does not exist"
      * (SQLState 42883) - the cast forces typed bindings.
      */
+    // Loads category and unit in the same SELECT. Without it every product on a page cost one more query for its
+    // category and one for its unit (N+1: 62 statements for a page of 30, evidence in docs/STATUS.md).
+    @EntityGraph(attributePaths = {"category", "unit"})
     @Query("""
             select p from Product p
             where (cast(:active as Boolean) is null or p.active = :active)
