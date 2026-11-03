@@ -1577,3 +1577,43 @@ Phase 6 overall: `VERIFIED`, gate closed, with the open items above.
   validation gap and could be a 400 or 500); the foreign key race is shown with SQL, not through
   the HTTP API; `ON DELETE CASCADE` and deferred constraints not explored; CI has not run on
   this branch.
+- 2026-11-03: unit 7.9 (zero-downtime migrations) `VERIFIED`. No new dependency. warehouse-service
+  Flyway V5 (expand: `warehouses.street_address`, two-way sync trigger `warehouses_sync_address`,
+  backfill) and V6 (contract: drop trigger, function and `address`); `Warehouse.address` maps to
+  the column `street_address`, the API field stays `address`. In a real rollout V6 ships a release
+  later; in this one-environment lab one deploy applied V5 and V6.
+  `ZeroDowntimeMigrationTest` (6 tests, own postgres:16.15-alpine container, real migrations in
+  staged order via Flyway `target`, the SQL of the old and the new release): before V5 the new
+  release fails with 42703; after V5 both releases read and write and the columns follow each
+  other (insert, update, update to NULL, both columns set differently: the new one wins; existing
+  rows backfilled with no difference); after V6 the new release works with the data intact and the
+  old release's SQL fails with 42703. The two stage tests ran red first against a build without
+  V5 and V6 (`No migration with a target version 5 could be found`, `bad SQL grammar`).
+  Lock queue: with T1 holding a transaction that read the table for about 3 s and an
+  `ALTER TABLE ... ADD COLUMN` waiting, a later plain SELECT waited 2862 and 2858 ms (2 backends
+  waiting on a lock in pg_stat_activity); with `lock_timeout = 500` the ALTER failed with 55P03
+  and the SELECT waited 323 and 324 ms. Index build on 1,000,000 rows with a writer at up to
+  about 200 inserts per second: plain `CREATE INDEX` 1738 / 1106 ms with the slowest insert 1717 /
+  1079 ms (a third full-suite run: 1242 ms); `CREATE INDEX CONCURRENTLY` 2323 / 1452 ms with the
+  slowest insert 333 / 164 ms (228 ms in the third run). `CREATE INDEX CONCURRENTLY` inside a
+  transaction fails with 25001.
+  Two problems on the way, both mine to report: (1) the first runs of the experiment tests hung.
+  Cause: Flyway's default transactional advisory lock keeps one of its connections idle in
+  transaction, and `CREATE INDEX CONCURRENTLY` waits for every older transaction forever
+  (`pg_stat_activity`: the build waiting on a `virtualxid` for 8+ minutes); `@Timeout` did not
+  free the blocked JDBC call, so I killed the test JVM twice and removed the leftover container.
+  Fix: `flyway.postgresql.transactional.lock=false` for that migration. (2) My first lock
+  measurement timed the reader after T1's commit instead of inside the reader (it printed 2865 ms
+  where the reader had waited 323 ms); corrected.
+  warehouse-service `clean verify`: 83 tests, 0 failures.
+  Live on the compose database: before, columns `address` and 6 warehouses; after rebuilding the
+  warehouse container Flyway applied V5 and V6 (history rows 4, 5, 6 successful), `address` and
+  the trigger are gone, the 6 values (WH-JKT01 `Jl. Logistik Raya No. 1, Jakarta` and the others)
+  are in `street_address`; through the gateway GET, PATCH and POST/GET of a warehouse return the
+  `address` field. The gateway answered 503 for roughly the first minute after the warehouse
+  restart, then 200 (the same transient seen after the catalog restarts of unit 7.7; the open item
+  "gateway after restart" now reproduced three times, not fixed). Guidebook
+  `guidebooks/23-zero-downtime-migrations.md`.
+  Limits: no live rolling deploy with two real releases at once (the compatibility is proven with
+  the SQL of both releases against the real schema); batched backfill and `NOT NULL ... NOT VALID`
+  are described, not run; the table is tiny; one machine; CI has not run on this branch.
