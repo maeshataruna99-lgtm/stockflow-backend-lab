@@ -447,9 +447,9 @@ observed distribution.
 
 ### Phase 6 --- Redis and caching labs
 
-Status: `IN PROGRESS` - units 6.1 (cache-aside, invalidation after commit, Redis failure) and 6.2 (eviction lab) `VERIFIED` 2026-11-03,
-evidence in `docs/STATUS.md` (Phase 6 progress log), `guidebooks/11-product-cache-aside.md` and `guidebooks/12-redis-eviction.md`. Units
-6.3 (stampede) and 6.4 (distributed caching) are `NOT STARTED`.
+Status: `IN PROGRESS` - units 6.1 (cache-aside, invalidation after commit, Redis failure), 6.2 (eviction lab) and 6.3 (stampede lab) `VERIFIED` 2026-11-03,
+evidence in `docs/STATUS.md` (Phase 6 progress log), `guidebooks/11-product-cache-aside.md` and `guidebooks/12-redis-eviction.md` and `guidebooks/13-cache-stampede.md`. Unit
+6.4 (distributed caching) is `NOT STARTED`.
 
 **Topics** - Cache invalidation. - Redis eviction. - Cache stampede. -
 Distributed caching across service instances.

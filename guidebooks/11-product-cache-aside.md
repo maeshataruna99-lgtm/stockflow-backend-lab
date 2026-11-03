@@ -15,6 +15,7 @@ Two things make a cache correct:
 - A missing product (404) is never cached.
 - Redis failure: a Redis error on read is counted (`catalog.cache{result=error}`), logged, and the request is served from the database. The result is not written back after a failed read, so an outage costs one timeout per request, not two. A failed eviction is counted and logged; the old copy lives until its TTL.
 - Timeouts: `spring.data.redis.timeout` and `connect-timeout` are 300 ms. The Redis health indicator is off for catalog (`management.health.redis.enabled: false`), so an outage degrades latency, not readiness.
+- A cache hit takes no database connection: `ProductService.get` is not transactional as a whole, only the load runs in a read-only transaction (a test counts Hikari connection acquisitions across a hit). Before this fix a hit still took a connection from the pool.
 - Switch: `stockflow.cache.enabled: false` sends every read to the database.
 - Counter `catalog.cache` with tags `cache=product` and `result=hit|miss|error`.
 - What is not cached: product lists and searches (invalidating every list a change touches is a separate problem), and other entities.
@@ -45,7 +46,7 @@ docker compose exec -T redis redis-cli TTL catalog:product:v1:1
 
 - Stale window: a reader that loaded the old row just before a commit can write it back right after the eviction. That copy lives until its TTL. A shorter TTL narrows the window; a version column would close it.
 - A lost eviction (Redis down during a PATCH) leaves the old copy for up to the TTL.
-- Cold start: the first request after a restart took about 1.8 s once (JIT, connection setup). The gateway response timeout is 1 s, so it retried the GET and the catalog counted two misses for one request, an accidental small stampede (see the stampede lab).
+- Cold start: the first request after a restart took about 1.8 s once (JIT, connection setup). The gateway response timeout is 1 s, so it retried the GET and the catalog counted two misses for one request, an accidental small stampede. Single-flight (guidebook 13) now answers the duplicate with the first load.
 - A corrupt cache entry is counted as an error, replaced from the database, and not served.
 - Redis is shared with the gateway rate limiter; an eviction policy that removes keys under memory pressure affects both (eviction lab).
 

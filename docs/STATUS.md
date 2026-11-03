@@ -1278,3 +1278,37 @@ labs).
   Limits: single run per policy on one machine; allkeys-lfu and volatile-ttl not
   run; replication behavior not exercised; the lab Redis container was removed
   afterwards and the core stack was unchanged.
+
+- 2026-11-03: unit 6.3 (cache stampede lab, single-flight) `VERIFIED`. No new
+  dependency. `ProductCache.getOrLoad` now coalesces simultaneous misses per
+  product id inside one catalog instance: the first request is the leader (it
+  looks in Redis once more, then loads from the database and stores), the others
+  wait on its `CompletableFuture`; a leader failure such as 404 is the answer
+  for every waiter. Switch `stockflow.cache.single-flight` (default true); lab
+  override `LAB_SINGLE_FLIGHT` in `compose.labs.yaml`. New results of the counter
+  `catalog.cache`: `load` (database read) and `coalesced`.
+  Tests first: `ProductCacheStampedeTest` (3 tests incl. 20 concurrent 404s) and
+  `ProductCacheStampedeUnprotectedTest` (single-flight off) against real Redis
+  and PostgreSQL containers, 40 threads released together via `ConcurrentGets`.
+  Measured: single-flight on = 1 database load for 40 requests; single-flight off
+  = 40 loads (the unprotected test prints the number; an earlier run printed 10,
+  see below). Live on the lab stack (`labs/caching/stampede-lab.sh`, 40 wget
+  requests straight at the catalog from the gateway container, product 1 key
+  deleted before each round): single-flight on, warm-up round 1 load (39
+  coalesced) and three rounds of 1, 1, 1 load (coalesced 14, 22, 4); single-flight
+  off, warm-up round straight after the restart 40 loads, then 7, 6, 5 loads. All
+  requests returned 200 in every round. One run per row, one machine, not a
+  benchmark.
+  Defect found by the lab, in unit 6.1: the first unprotected test run showed 10
+  loads, not 40, because `ProductService.get` was `@Transactional`, so every
+  request took one of the 10 pooled connections before it even checked the
+  cache. A new test (`hitDoesNotUseTheDatabase`, counting `hikaricp.connections.acquire`
+  around a hit) failed, which proved that a cache HIT also took a connection. Fix:
+  `get` is no longer transactional as a whole; only the load runs in a read-only
+  `TransactionTemplate`. After the fix the test passes and the unprotected herd is
+  the full 40.
+  catalog-service `clean verify`: 56 tests, 0 failures (one run after the last
+  code change; the stampede and eviction tests also passed in the runs before the transaction change).
+  Limits: single-flight is per instance, so a herd across N instances costs up to
+  N loads (unit 6.4); no distributed lock, no TTL jitter, no stale-while-revalidate;
+ 
