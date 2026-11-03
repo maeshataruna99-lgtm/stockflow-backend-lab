@@ -47,6 +47,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(a -> a
                         .requestMatchers("/actuator/health/**", "/actuator/info", "/v3/api-docs/**",
                                 "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        // exposed only in the lab override (compose.labs.yaml); admin token needed to read it
+                        .requestMatchers("/actuator/metrics/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/v1/**").hasAnyRole("USER", "ADMIN")
                         .requestMatchers("/api/v1/**").hasRole("ADMIN")
                         .anyRequest().denyAll())

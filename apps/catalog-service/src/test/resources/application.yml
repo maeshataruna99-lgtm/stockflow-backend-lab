@@ -9,3 +9,12 @@ stockflow:
   security:
     jwt:
       secret: test-only-signing-key-not-a-real-secret-0123456789
+  cache:
+    # off for the whole suite so no test depends on a Redis at localhost; the cache tests switch it on
+    enabled: false
+
+# mirrors application.yml (this file shadows it in tests): the optional cache must not decide health
+management:
+  health:
+    redis:
+      enabled: false

@@ -41,3 +41,12 @@ management:
 
 # lab setting: sample every request so each one can be followed in the logs
 management.tracing.sampling.probability: 1.0
+
+# Phase 6 product cache (cache-aside on GET /api/v1/products/{id}). Redis is an optimisation, the database is the
+# source of truth: a Redis outage must not make the service unhealthy, so its health check is off, and every Redis
+# call has a short timeout so an outage costs at most that much per request.
+spring.data.redis.timeout: 300ms
+spring.data.redis.connect-timeout: 300ms
+management.health.redis.enabled: false
+stockflow.cache.enabled: true
+stockflow.cache.product-ttl: 60s

@@ -3,6 +3,7 @@ package dev.stockflow.catalog.api;
 import dev.stockflow.catalog.api.dto.ProductRequest;
 import dev.stockflow.catalog.api.dto.ProductResponse;
 import dev.stockflow.catalog.api.dto.ProductUpdateRequest;
+import dev.stockflow.catalog.cache.ProductCache;
 import dev.stockflow.catalog.domain.Category;
 import dev.stockflow.catalog.domain.Product;
 import dev.stockflow.catalog.domain.Unit;
@@ -25,13 +26,16 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
     private final UnitRepository unitRepository;
+    private final ProductCache productCache;
 
     ProductService(ProductRepository productRepository,
                    CategoryRepository categoryRepository,
-                   UnitRepository unitRepository) {
+                   UnitRepository unitRepository,
+                   ProductCache productCache) {
         this.productRepository = productRepository;
         this.categoryRepository = categoryRepository;
         this.unitRepository = unitRepository;
+        this.productCache = productCache;
     }
 
     @Transactional(readOnly = true)
@@ -43,9 +47,9 @@ public class ProductService {
 
     @Transactional(readOnly = true)
     public ProductResponse get(Long id) {
-        return productRepository.findById(id)
+        return productCache.getOrLoad(id, () -> productRepository.findById(id)
                 .map(ProductResponse::from)
-                .orElseThrow(() -> ResourceNotFoundException.of("product", id));
+                .orElseThrow(() -> ResourceNotFoundException.of("product", id)));
     }
 
     @Transactional
@@ -93,6 +97,7 @@ public class ProductService {
         // during flush, so the returned DTO carries the real audit time
         // instead of the pre-update value (live-run evidence, STATUS.md).
         Product saved = productRepository.saveAndFlush(product);
+        productCache.evictAfterCommit(id);
         return ProductResponse.from(saved);
     }
 }
