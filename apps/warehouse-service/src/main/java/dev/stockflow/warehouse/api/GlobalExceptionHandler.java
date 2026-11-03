@@ -132,9 +132,20 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(DataIntegrityViolationException.class)
     ProblemDetail handleDataIntegrity(DataIntegrityViolationException ex) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
-                HttpStatus.CONFLICT, "The request violates a unique constraint");
-        problem.setTitle("Duplicate resource");
+        Throwable root = NestedExceptionUtils.getMostSpecificCause(ex);
+        String sqlState = root instanceof SQLException sql ? sql.getSQLState() : null;
+        ProblemDetail problem;
+        if ("23505".equals(sqlState)) {
+            problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "The request violates a unique constraint");
+            problem.setTitle("Duplicate resource");
+        } else if ("23503".equals(sqlState)) {
+            problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                    "The request refers to a row that does not exist or is still referenced by other rows");
+            problem.setTitle("Reference conflict");
+        } else {
+            problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "The request violates a data constraint");
+            problem.setTitle("Constraint violation");
+        }
         return problem;
     }
 }
