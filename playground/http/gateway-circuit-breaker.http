@@ -1,0 +1,31 @@
+### Circuit breaker and fallback (unit 5.4)
+### Gateway: http://localhost:8080. Passwords come from .env.
+
+@gatewayUrl = http://localhost:8080
+
+### 1. Login as demo user
+# @name userLogin
+POST {{gatewayUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "demo-user",
+  "password": "<DEMO_USER_PASSWORD from .env>"
+}
+
+@userToken = {{userLogin.response.body.accessToken}}
+
+### 2. Healthy: 200
+GET {{gatewayUrl}}/api/v1/products
+Authorization: Bearer {{userToken}}
+
+### 3. Stop the catalog first: docker compose stop catalog
+### Then send this several times. Expected: 503 application/problem+json,
+### title "Service unavailable", instance "/fallback".
+GET {{gatewayUrl}}/api/v1/products
+Authorization: Bearer {{userToken}}
+
+### 4. Recovery: docker compose start catalog, wait for it to be healthy.
+### After the wait-duration (10s by default) this returns 200 again.
+GET {{gatewayUrl}}/api/v1/products
+Authorization: Bearer {{userToken}}

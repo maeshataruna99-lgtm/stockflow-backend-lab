@@ -41,7 +41,7 @@ documentation with an opt-in hostdev override (unit 4.3); gate review
 below. Phase 5 - API gateway and its ten use cases: `IN PROGRESS` - units 5.1
 (Dynamic Routing), 5.2 (JWT Authentication & Role Authorization) and 5.3
 (Redis-backed rate limiting) `VERIFIED` (evidence below; 5.3 against real
-Redis on 2026-11-03); unit 5.4 (circuit breaker) is next.
+Redis on 2026-11-03); unit 5.4 (circuit breaker) `VERIFIED` 2026-11-03; unit 5.5 (load balancing) is next.
 Phase 0 evidence below remains the gate.
 
 ## Last verified commit
@@ -868,3 +868,25 @@ configuration question.
 - 2026-11-03: CI evidence for units 5.2 and 5.3 and the secrets fix: Actions
   run 41566713553 on commit `dea268f` (PR 2 branch head) concluded success,
   4 of 4 checks passing. PR 2 merged to main as `6b86965`.
+
+- 2026-11-03: unit 5.4 (circuit breaker and controlled fallback in
+  api-gateway) `VERIFIED`. Added `spring-cloud-starter-circuitbreaker-reactor-resilience4j`
+  (version from the Spring Cloud 2025.0.3 BOM, approved by the user). Per-route
+  breakers (`catalog-products`, `catalog-categories`, `warehouse`) after the rate
+  limiter; failures are exceptions, timeouts and downstream 500/502/503/504;
+  `FallbackController` returns a 503 problem+json and never a success body;
+  no retry, so a write is sent once. Settings live under
+  `stockflow.gateway.circuit-breaker.*`.
+  `.\mvnw.cmd clean verify` in `apps/api-gateway`: 31 tests (3 new in
+  `CircuitBreakerGatewayTest`), 0 failures, BUILD SUCCESS. The tests prove:
+  3 requests to a failing downstream give 3x 503 with only 2 downstream hits;
+  a slow downstream times out to 503; a failed POST gives 503 and reaches the
+  downstream exactly once.
+  Live on the compose stack (rebuilt gateway): healthy GET 200; with `catalog`
+  stopped, 6 GETs and a POST /api/v1/products all returned 503 problem+json;
+  after `docker compose start catalog` the same GET returned 200 again, 31 s
+  after the start (includes the catalog boot). Single run, local machine.
+  Limits: circuit state is per gateway instance; `GET /fallback` is reachable
+  directly without a token and returns the same constant 503; the live POST was
+  rejected by an already-open circuit, so the "downstream 500 on a write" case
+  is covered by the unit test only.
