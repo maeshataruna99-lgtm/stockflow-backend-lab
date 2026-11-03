@@ -4,21 +4,8 @@ server:
 spring:
   application:
     name: api-gateway
-  cloud:
-    gateway:
-      routes:
-        - id: catalog-products-route
-          uri: lb://CATALOG-SERVICE
-          predicates:
-            - Path=/api/v1/products, /api/v1/products/**
-        - id: catalog-categories-route
-          uri: lb://CATALOG-SERVICE
-          predicates:
-            - Path=/api/v1/categories, /api/v1/categories/**
-        - id: warehouse-route
-          uri: lb://WAREHOUSE-SERVICE
-          predicates:
-            - Path=/api/v1/warehouses, /api/v1/warehouses/**
+
+# routes live only in GatewayRoutesConfig: a copy here would be a second route without the rate limiter and breaker
 
 eureka:
   client:
@@ -30,3 +17,15 @@ management:
     web:
       exposure:
         include: health,info
+
+# every outbound call has a connect and a response timeout; the circuit breaker timeout must stay above
+# retries x response-timeout (see stockflow.gateway.circuit-breaker.timeout)
+spring.cloud.gateway.server.webflux.httpclient:
+  connect-timeout: 2000
+  response-timeout: 1s
+
+# lab setting: sample every request so each one can be followed in the logs
+management.tracing.sampling.probability: 1.0
+
+# puts the trace id into reactive log lines (MDC) on the gateway
+spring.reactor.context-propagation: auto

@@ -1,0 +1,22 @@
+### Discovery-based load balancing (unit 5.5)
+### Start the second instance: docker compose -f compose.yaml -f compose.labs.yaml up --build -d
+### Passwords come from .env.
+
+@gatewayUrl = http://localhost:8080
+
+### 1. Login
+# @name userLogin
+POST {{gatewayUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "demo-user",
+  "password": "<DEMO_USER_PASSWORD from .env>"
+}
+
+@userToken = {{userLogin.response.body.accessToken}}
+
+### 2. Send this several times, then compare the request count on catalog and catalog-2
+### (metrics command in guidebooks/05-discovery-load-balancing.md). Expect an even split.
+GET {{gatewayUrl}}/api/v1/products
+Authorization: Bearer {{userToken}}

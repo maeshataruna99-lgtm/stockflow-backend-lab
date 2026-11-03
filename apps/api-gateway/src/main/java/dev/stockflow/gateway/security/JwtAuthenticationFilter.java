@@ -1,24 +1,19 @@
 package dev.stockflow.gateway.security;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.stockflow.gateway.config.ProblemWriter;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
-import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ProblemDetail;
 import org.springframework.http.server.reactive.ServerHttpRequest;
-import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
-import java.net.URI;
 import java.util.Collections;
 import java.util.List;
 
@@ -26,11 +21,11 @@ import java.util.List;
 public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
     private final JwtService jwtService;
-    private final ObjectMapper objectMapper;
+    private final ProblemWriter problems;
 
-    public JwtAuthenticationFilter(JwtService jwtService, ObjectMapper objectMapper) {
+    public JwtAuthenticationFilter(JwtService jwtService, ProblemWriter problems) {
         this.jwtService = jwtService;
-        this.objectMapper = objectMapper;
+        this.problems = problems;
     }
 
     @Override
@@ -58,7 +53,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
         String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             return writeProblemDetail(
-                    exchange.getResponse(),
+                    exchange,
                     HttpStatus.UNAUTHORIZED,
                     "Missing or invalid Authorization header",
                     "urn:stockflow:problem:missing-token"
@@ -73,7 +68,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             claims = jwtService.validateAndExtractClaims(token);
         } catch (JwtException | IllegalArgumentException e) {
             return writeProblemDetail(
-                    exchange.getResponse(),
+                    exchange,
                     HttpStatus.UNAUTHORIZED,
                     "Invalid, expired or tampered JWT token: " + e.getMessage(),
                     "urn:stockflow:problem:invalid-token"
@@ -88,7 +83,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             // Read operations require at least ROLE_USER or ROLE_ADMIN
             if (!hasAnyRole(roles, "ROLE_USER", "ROLE_ADMIN")) {
                 return writeProblemDetail(
-                        exchange.getResponse(),
+                        exchange,
                         HttpStatus.FORBIDDEN,
                         "Insufficient role for read operations. Required: ROLE_USER or ROLE_ADMIN",
                         "urn:stockflow:problem:forbidden"
@@ -98,7 +93,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             // Mutating operations (POST, PATCH, PUT, DELETE) require ROLE_ADMIN
             if (!hasAnyRole(roles, "ROLE_ADMIN")) {
                 return writeProblemDetail(
-                        exchange.getResponse(),
+                        exchange,
                         HttpStatus.FORBIDDEN,
                         "Admin role required for mutating operations. Required: ROLE_ADMIN",
                         "urn:stockflow:problem:forbidden"
@@ -145,21 +140,8 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
         return false;
     }
 
-    private Mono<Void> writeProblemDetail(ServerHttpResponse response, HttpStatus status, String detail, String typeUrn) {
-        response.setStatusCode(status);
-        response.getHeaders().setContentType(MediaType.APPLICATION_PROBLEM_JSON);
-
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
-        problem.setTitle(status.getReasonPhrase());
-        problem.setType(URI.create(typeUrn));
-
-        try {
-            byte[] bytes = objectMapper.writeValueAsBytes(problem);
-            DataBuffer buffer = response.bufferFactory().wrap(bytes);
-            return response.writeWith(Mono.just(buffer));
-        } catch (Exception e) {
-            return response.setComplete();
-        }
+    private Mono<Void> writeProblemDetail(ServerWebExchange exchange, HttpStatus status, String detail, String typeUrn) {
+        return problems.write(exchange, status, detail, typeUrn);
     }
 
     @Override

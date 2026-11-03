@@ -333,8 +333,8 @@ counts identical 2/2/2/2 and 1/3; container restart with volume
 persistence also proven in unit 2.1). - [x] Catalog and warehouse roles
 cannot write to each other's database (four real psql connections:
 cross-database CONNECT denied both ways, same-database create/insert/drop
-succeeds both ways). - [ ] Root user is not seeded in production profile
-(deferred with the seeding itself to Phase 5, ADR 0003). - [x] No actual
+succeeds both ways). - [x] Root user is not seeded in production profile
+(gateway only, no database seeding; closed by the Phase 5 review in docs/STATUS.md). - [x] No actual
 secret appears in repository or logs (`password: ${...}` with no default
 fails fast; `.env` gitignored, random passwords never echoed;
 `.env.example` holds placeholders only).
@@ -345,8 +345,8 @@ migrated from version 0). - [x] Inspect migration history and seed row
 counts (psql outputs recorded in docs/STATUS.md). - [x] Restart and
 verify state remains stable (container restart + second service run;
 row counts unchanged). - [x] Test database role permissions (isolation
-proof above). - [ ] Test production profile does not create the demo
-root user (Phase 5, ADR 0003).
+proof above). - [x] Test production profile does not create the demo
+root user (ProductionProfileSecurityTest, Phase 5 review).
 
 ### Phase 3 --- MVC/JPA/JPQL master data APIs
 
@@ -413,21 +413,22 @@ CI runs 40674415027 and 40674854953 all green).
 
 ### Phase 5 --- API Gateway and ten gateway use cases
 
-Status: `IN PROGRESS` (Units 5.1, 5.2, and 5.3 `VERIFIED` on 2026-10-29; evidence in
-`docs/STATUS.md`).
+Status: `VERIFIED` (2026-11-03, gate closed; all ten units verified: 5.1-5.3 on 2026-10-29, 5.4-5.10 on 2026-11-03;
+evidence in `docs/STATUS.md`: gate review and closure sections, CI run 41580832608 green on PR 3, ADR 0007 for service-level
+JWT verification). Open minor item: gateway startup readiness.
 
 Implement and test these individually:
 
 1.  [x] **Dynamic routing** (`VERIFIED` 2026-10-29: `GatewayRoutesConfig` in `apps/api-gateway`, WireMock reactive routing test 10/10 green, `guidebooks/01-dynamic-routing.md`, `playground/http/gateway-dynamic-routing.http`).
 2.  [x] **JWT authentication and role authorization** (`VERIFIED` 2026-10-29: ADR 0006, `JwtAuthenticationFilter`, `JwtService`, `DemoAuthController` with ADR 0003 BCrypt isolation, 10/10 security tests green including prod-isolation, `guidebooks/02-jwt-authentication-authorization.md`, `playground/http/gateway-jwt-auth.http`).
 3.  [x] **Redis-backed rate limiting** (`VERIFIED` 2026-10-29, real-Redis burst check 2026-11-03: `RateLimitProperties`, `UserOrIpKeyResolver` anti-spoofing resolver, `RateLimiterConfig` with reactive Redis RateLimiter, status 429 response, in-memory controllable test rate limiter, 6/6 unit/integration tests green, `guidebooks/03-redis-rate-limiting.md`, `playground/http/gateway-rate-limiting.http`).
-4.  [ ] Circuit breaker and controlled fallback.
-5.  [ ] Discovery-based load balancing with two service instances.
-6.  [ ] Timeout and bounded retry for safe/idempotent operations.
-7.  [ ] Request/response transformation and trace/request ID.
-8.  [ ] Distributed tracing and correlation ID.
-9.  [ ] Centralized error contract without leaking internals.
-10. [ ] API versioning/backward compatibility.
+4.  [x] **Circuit breaker and controlled fallback** (`VERIFIED` 2026-11-03: Resilience4j per-route breakers, `FallbackController` 503 problem+json, no retry on writes, 31/31 gateway tests, live stop/start of catalog, `guidebooks/04-circuit-breaker-fallback.md`, `playground/http/gateway-circuit-breaker.http`).
+5.  [x] **Discovery-based load balancing with two service instances** (`VERIFIED` 2026-11-03: `LoadBalancingGatewayTest` 5/5 split, `compose.labs.yaml`, live 10/10 split across two catalog containers, failure path observed, `guidebooks/05-discovery-load-balancing.md`, `playground/http/gateway-load-balancing.http`).
+6.  [x] **Timeout and bounded retry for safe/idempotent operations** (`VERIFIED` 2026-11-03: GET-only retry on 502/503/504 and timeouts, 2 retries with backoff, 1s response timeout, `RetryTimeoutGatewayTest` 4/4, live failover 12/12 200 and hung downstream 503 in 3.4s, `guidebooks/06-timeout-and-retry.md`, `playground/http/gateway-retry-timeout.http`).
+7.  [x] **Request/response transformation and trace/request ID** (`VERIFIED` 2026-11-03: `RequestIdFilter`, Server header removed, nosniff added, `RequestIdGatewayTest` 5/5, live header checks, `guidebooks/07-request-id-and-transformation.md`, `playground/http/gateway-request-id.http`).
+8.  [x] **Distributed tracing and correlation ID** (`VERIFIED` 2026-11-03 for log-level tracing: Micrometer Tracing OTel bridge in gateway, catalog, warehouse; `traceparent` forwarded, same trace id in gateway and catalog logs, `TracingGatewayTest` 2/2, `guidebooks/08-distributed-tracing.md`, `playground/http/gateway-tracing.http`; span export and Jaeger are Phase 10).
+9.  [x] **Centralized error contract without leaking internals** (`VERIFIED` 2026-11-03: ProblemWriter, GatewayErrorHandler, RateLimitProblemFilter, ErrorContractGatewayTest 6/6, full suite 49/49, live 404/401/429/503 bodies, `guidebooks/09-error-contract.md`, `playground/http/gateway-error-contract.http`).
+10. [x] **API versioning/backward compatibility** (`VERIFIED` 2026-11-03: `ApiVersionFilter` rewrites unversioned paths to v1 with Deprecation and Link headers, same auth/limit/breaker as v1, unknown version 404, `ApiVersioningGatewayTest` 6/6, full suite 55/55, live checks, `guidebooks/10-api-versioning.md`, `playground/http/gateway-api-versioning.http`).
 
 **Acceptance criteria for each use case** - Has a guidebook section. -
 Has a Bruno or `.http` request collection. - Has normal and failure-path

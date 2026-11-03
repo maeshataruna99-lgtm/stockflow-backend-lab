@@ -4,3 +4,8 @@
 eureka:
   client:
     enabled: false
+
+stockflow:
+  security:
+    jwt:
+      secret: test-only-signing-key-not-a-real-secret-0123456789

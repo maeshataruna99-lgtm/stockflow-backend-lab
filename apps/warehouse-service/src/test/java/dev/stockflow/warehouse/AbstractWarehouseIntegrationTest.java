@@ -2,6 +2,7 @@ package dev.stockflow.warehouse;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.testcontainers.containers.PostgreSQLContainer;
 
@@ -19,6 +20,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
  * Ryuk reaps the container when the JVM exits.
  */
 @SpringBootTest
+@Import(TestAuthConfig.class)
 public abstract class AbstractWarehouseIntegrationTest {
 
     @ServiceConnection

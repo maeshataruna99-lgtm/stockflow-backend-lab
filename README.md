@@ -42,8 +42,14 @@ Key documents:
   2026-10-28 (gate closed; multi-stage non-root Dockerfiles, full
   six-service compose stack with internal network, Eureka registration,
   health checks, restart and volume-preservation evidence).
-- Phases 5-10: NOT STARTED. Gateway use cases, caching, demo auth, Kubernetes,
-  hardening follow the ROADMAP order.
+- Phase 5 - API gateway and its ten use cases: VERIFIED on 2026-11-03 (gate
+  closed; dynamic routing, JWT authentication and roles, Redis rate limiting,
+  circuit breaker, load balancing, timeout and GET-only retry, request ID,
+  tracing in logs, one error contract, API versioning; 58 gateway tests, CI run
+  41580832608 green). Catalog and warehouse verify the JWT themselves
+  (ADR 0007). Known limits are in [docs/STATUS.md](docs/STATUS.md).
+- Phases 6-10: NOT STARTED. Caching, database, resilience, messaging and
+  observability labs follow the ROADMAP order.
 
 ## Prerequisites
 
@@ -140,6 +146,10 @@ docker compose -f compose.yaml -f compose.hostdev.yaml up -d postgres
 `compose.hostdev.yaml` publishes postgres on 127.0.0.1:15432 only. It is an
 opt-in debugging aid, never part of the default stack, and the Java services
 in compose ignore it entirely.
+
+A host-run catalog or warehouse also needs the token key in its environment
+(`STOCKFLOW_SECURITY_JWT_SECRET`, same value as `JWT_SECRET`), because both
+services verify the gateway's JWT themselves (ADR 0007).
 
 ## Security caveats
 

@@ -105,6 +105,7 @@ services:
       # internal DNS, never localhost: postgres is a different container
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/catalogdb
       CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?set CATALOG_DB_PASSWORD in .env}
+      STOCKFLOW_SECURITY_JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
     depends_on:
       postgres:
@@ -128,6 +129,7 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/warehousedb
       WAREHOUSE_DB_PASSWORD: ${WAREHOUSE_DB_PASSWORD:?set WAREHOUSE_DB_PASSWORD in .env}
+      STOCKFLOW_SECURITY_JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
     depends_on:
       postgres:

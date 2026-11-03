@@ -41,7 +41,7 @@ documentation with an opt-in hostdev override (unit 4.3); gate review
 below. Phase 5 - API gateway and its ten use cases: `IN PROGRESS` - units 5.1
 (Dynamic Routing), 5.2 (JWT Authentication & Role Authorization) and 5.3
 (Redis-backed rate limiting) `VERIFIED` (evidence below; 5.3 against real
-Redis on 2026-11-03); unit 5.4 (circuit breaker) is next.
+Redis on 2026-11-03); unit 5.4 (circuit breaker) `VERIFIED` 2026-11-03; 5.5 (load balancing) `VERIFIED` 2026-11-03; 5.6 (timeout and retry) `VERIFIED` 2026-11-03; 5.7 (request ID) `VERIFIED` 2026-11-03; 5.8 (tracing) `VERIFIED` 2026-11-03; 5.9 (error contract) `VERIFIED` 2026-11-03; 5.10 (API versioning) `VERIFIED` 2026-11-03; all ten Phase 5 units are verified; the Phase 5 gate review (below) found it not closable yet.
 Phase 0 evidence below remains the gate.
 
 ## Last verified commit
@@ -865,3 +865,328 @@ configuration question.
   the old hardcoded default returned 401. `.env` values are random and
   were never printed. The earlier STATUS entries that quote the old
   defaults describe the state at that time.
+- 2026-11-03: CI evidence for units 5.2 and 5.3 and the secrets fix: Actions
+  run 41566713553 on commit `dea268f` (PR 2 branch head) concluded success,
+  4 of 4 checks passing. PR 2 merged to main as `6b86965`.
+
+- 2026-11-03: unit 5.4 (circuit breaker and controlled fallback in
+  api-gateway) `VERIFIED`. Added `spring-cloud-starter-circuitbreaker-reactor-resilience4j`
+  (version from the Spring Cloud 2025.0.3 BOM, approved by the user). Per-route
+  breakers (`catalog-products`, `catalog-categories`, `warehouse`) after the rate
+  limiter; failures are exceptions, timeouts and downstream 500/502/503/504;
+  `FallbackController` returns a 503 problem+json and never a success body;
+  no retry, so a write is sent once. Settings live under
+  `stockflow.gateway.circuit-breaker.*`.
+  `.\mvnw.cmd clean verify` in `apps/api-gateway`: 31 tests (3 new in
+  `CircuitBreakerGatewayTest`), 0 failures, BUILD SUCCESS. The tests prove:
+  3 requests to a failing downstream give 3x 503 with only 2 downstream hits;
+  a slow downstream times out to 503; a failed POST gives 503 and reaches the
+  downstream exactly once.
+  Live on the compose stack (rebuilt gateway): healthy GET 200; with `catalog`
+  stopped, 6 GETs and a POST /api/v1/products all returned 503 problem+json;
+  after `docker compose start catalog` the same GET returned 200 again, 31 s
+  after the start (includes the catalog boot). Single run, local machine.
+  Limits: circuit state is per gateway instance; `GET /fallback` is reachable
+  directly without a token and returns the same constant 503; the live POST was
+  rejected by an already-open circuit, so the "downstream 500 on a write" case
+  is covered by the unit test only.
+
+- 2026-11-03: unit 5.5 (discovery-based load balancing with two instances)
+  `VERIFIED`. No gateway code change: the `lb://CATALOG-SERVICE` routes
+  already balance round robin. Added `LoadBalancingGatewayTest` (two
+  WireMock instances behind the simple discovery client; 10 requests give
+  exactly 5 and 5) and the opt-in `compose.labs.yaml` (second catalog
+  instance `catalog-2`, metrics endpoint exposed on both catalog instances,
+  internal only). `mvnw.cmd --batch-mode test -Dtest=LoadBalancingGatewayTest`:
+  1 test, 0 failures. Live on the compose stack with
+  `-f compose.yaml -f compose.labs.yaml`: Eureka listed two UP
+  CATALOG-SERVICE instances (plus one stale DOWN entry left from the earlier
+  catalog restart). 20 requests through the gateway, counted per instance via
+  `http.server.requests` for `/api/v1/products`: catalog +10, catalog-2 +10.
+  Failure path: after `stop catalog-2`, 12 requests sent at once gave 5x 200
+  and 7x 503 (the gateway still used its cached instance list; the circuit
+  breaker answered 503); 45 s later 12 of 12 were 200. Single run, local
+  machine. Full gateway suite: `clean verify` 32 tests, 0 failures. Limits: no failover to the surviving instance (that is use case 6);
+  circuit state and the instance cache are per gateway instance.
+  The lab instance was removed afterwards and the core stack restored
+  (6 containers healthy).
+
+- 2026-11-03: unit 5.6 (timeout and bounded retry for safe operations)
+  `VERIFIED`. Tests written first: 3 of the 4 new tests failed before the
+  change (retry missing). Implementation: retry filter inside the circuit
+  breaker on all three routes, GET only, statuses 502/503/504 plus timeouts and
+  I/O errors, 2 retries with exponential backoff (`RetryProperties`,
+  `stockflow.gateway.retry.*`); gateway HTTP client connect-timeout 2000 ms and
+  response-timeout 1s in `application.yml`; circuit breaker timeout raised from
+  2 s to 5 s so it covers all attempts. `RetryTimeoutGatewayTest`, run twice
+  (4 tests, 0 failures each time): flaky GET retried to 200 with 2 hits;
+  always-503 GET sent 3 times then 503; POST with 503 sent once; slow
+  downstream attempted 3 times then 503. Live (compose labs, rebuilt gateway,
+  two catalog instances): both up 6/6 200; right after `stop catalog-2`,
+  12/12 requests were 200 (unit 5.5 measured 5x 200 and 7x 503 for the same
+  step before retry existed); with the only catalog instance `docker pause`d, one
+  GET returned 503 after 3402 ms (3 x 1 s response timeout plus backoff), which
+  also proves the production timeout values are loaded. Single run, local
+  machine. Notes: the first draft of the timeout test passed only because it set
+  its own 300 ms timeout; `src/test/resources/application.yml` shadows the main
+  one, so timeout settings are repeated in the test properties. A first run of
+  the flaky-retry test with a 300 ms timeout once counted 3 hits instead of 2,
+  most likely a cold-start timeout; it was stable at 1 s (2 runs). Limits: retries
+  are not jittered by this configuration beyond reactor's default backoff
+  behaviour (not measured); no idempotency keys, so writes are never retried.
+  Core stack restored afterwards.
+  Full gateway suite after this unit: `clean verify` 36 tests, 0 failures,
+  run twice. One earlier full run failed once in
+  `CircuitBreakerGatewayTest.failedWriteReturns503AndIsSentOnce` (the POST never
+  reached WireMock, consistent with its 300 ms breaker timeout firing on a slow
+  cold start); that test's timeout was raised to 1 s and its slow stub to 3 s,
+  and the suite then passed twice.
+
+- 2026-11-03: unit 5.7 (request ID and request/response transformation)
+  `VERIFIED`. Tests written first: all 5 new tests failed before the change.
+  Added `RequestIdFilter` (global, highest precedence): keeps a client
+  `X-Request-Id` only if it matches `[A-Za-z0-9._-]{1,64}`, else generates a
+  UUID; forwards it downstream; sets it once on the response in `beforeCommit`
+  so gateway-produced answers (401, 429, 503) carry it. In `protect(...)` the
+  response `Server` header is removed and `X-Content-Type-Options: nosniff`
+  added. `RequestIdGatewayTest`: 5 tests, 0 failures (generated ID visible
+  downstream and in the response; valid client ID kept; malformed ID replaced;
+  401 carries an ID; Server removed and nosniff added). Live on the rebuilt
+  gateway: no ID sent returned a generated UUID, `client-trace-42` came back
+  unchanged, `bad id <x>` was replaced by a UUID, a 401 without token carried an
+  ID, and nosniff was present with no Server header. Single run, local machine.
+  Limits: that the downstream receives the ID is proven by the WireMock test
+  only, because catalog and warehouse do not log it yet (structured logging is
+  Phase 10); the ID is not a W3C trace context (use case 8).
+  Full gateway suite after this unit: `clean verify` 41 tests, 0 failures (one run).
+
+- 2026-11-03: unit 5.8 (distributed tracing and correlation ID)
+  `VERIFIED` for log-level tracing. Added `micrometer-tracing-bridge-otel`
+  (Boot-managed version, approved by the user) to api-gateway, catalog-service
+  and warehouse-service; `management.tracing.sampling.probability: 1.0` in all
+  three; `spring.reactor.context-propagation: auto` in the gateway. Tests
+  first: both `TracingGatewayTest` tests failed before the dependency (no
+  `traceparent` downstream); after it, 2/2 pass. A first version of the test
+  passed one case only because WireMock's request journal carried over from the
+  other test; fixed with a reset in `@BeforeEach`. `clean verify` per app:
+  api-gateway 43 tests, catalog-service 19, warehouse-service 17, all with 0
+  failures. Live on the rebuilt stack (compose labs for DEBUG request logs): one
+  request through the gateway with `traceparent` trace id
+  `4bf92f3577b34da6a3ce929d0e0e4736` produced log lines with that trace id and
+  different span ids in both the gateway (`e2d5125870ae0299`) and the catalog
+  (`815209bfb063e89f`). Before `spring.reactor.context-propagation: auto` the
+  gateway lines had an empty trace slot, so that setting is required. The
+  correlation ID is `X-Request-Id` (unit 5.7); the trace id is the internal
+  identifier. Single run, local machine. Limits: no exporter, collector or Jaeger,
+  so spans are not viewable as a tree (Phase 10); warehouse got the same
+  dependency and passes its tests but was not exercised live; the debug env vars
+  in `compose.labs.yaml` are lab-only; sampling 1.0 is a lab value.
+
+- 2026-11-03: unit 5.9 (centralized error contract without leaking internals)
+  `VERIFIED`. Tests written first (they did not compile before the change).
+  Added `ProblemWriter` (RFC 7807 body: type, title = reason phrase, status,
+  fixed detail per status, requestId), `GatewayErrorHandler` (`@Order(-2)`,
+  any exception becomes a problem, the real cause is logged, not returned) and
+  `RateLimitProblemFilter` (gives the limiter empty 429 the same body).
+  `JwtAuthenticationFilter` and `FallbackController` now use the same writer
+  and texts. One real defect found by the test: a 404 for an unknown path
+  carried no request ID because no route means no gateway filter chain; fixed
+  by making `RequestIdFilter` a `WebFilter`. Deliberate contract change: the
+  503 title is now the reason phrase "Service Unavailable" (was "Service
+  unavailable"), and two assertions in `CircuitBreakerGatewayTest` were updated
+  to match. `ErrorContractGatewayTest`: 6 tests. Full gateway suite
+  `clean verify`: 49 tests, 0 failures (one run). Live on the rebuilt gateway:
+  404 body with title "Not Found", detail "No route matches this request." and
+  requestId equal to the X-Request-Id header; 401 kept its
+  `urn:stockflow:problem:missing-token` type and gained requestId; with real
+  Redis an 80-request async burst gave 40x 200 and 40x 429, and a 429 body was
+  `application/problem+json` with requestId and `X-RateLimit-Remaining: 0`;
+  with `catalog` stopped, the 503 returned the problem body with requestId and
+  no host name. Single run, local machine. Limits: errors produced by catalog
+  and warehouse are passed through unchanged, so their shape can differ; the 500
+  path is proven by a unit-level test of the handler, not by a live fault; the
+  429 decorator wraps `setComplete()` of the limiter and needs a retest if the
+  limiter filter is replaced.
+
+- 2026-11-03: unit 5.10 (API versioning and backward compatibility)
+  `VERIFIED`. Tests first: the first-draft tests failed before the
+  change (alias, deprecation, rate limit and write cases). Added `ApiVersionFilter` (web filter before routing): an
+  unversioned `/api/<x>` path is rewritten to `/api/v1/<x>` with the query
+  string kept, and the response gets `Deprecation: true` and
+  `Link: </api/v1/<x>>; rel="successor-version"`. Rewriting before routing
+  keeps the alias on the same route as v1, so it shares authentication, role
+  check, rate limit bucket and circuit breaker; a separate alias route would
+  have given a second quota. An unknown version (`/api/v9/...`) has no route
+  and returns the 404 problem body. `ApiVersioningGatewayTest`: 6 tests, 0
+  failures. Two corrections made while writing it: a draft test expected 401
+  for an unauthenticated `/api/v9/...`, but no route means no gateway filter
+  runs, so it is 404 for every caller (same as any unknown path); I had
+  widened the JWT guard from `/api/v1/` to `/api/` for it, reverted that change
+  and removed the test, so `JwtAuthenticationFilter` is untouched by this unit.
+  Live on the rebuilt gateway: `/api/v1/products?size=2` 200 with no
+  Deprecation header; `/api/products?size=2` 200 with `Deprecation: true` and
+  `Link: </api/v1/products>; rel="successor-version"`; `/api/categories` 200
+  with the matching Link; `/api/products` without a token 401 problem body;
+  `/api/v9/products` with a token 404 problem body. Single run, local machine.
+  Limits: only v1 exists, so a real v2 route and a `Sunset` date are not
+  implemented; the alias is a compatibility measure that should be monitored
+  and removed later; `/api/<unknown>` is rewritten to `/api/v1/<unknown>` and
+  fails at the downstream with its own 404.
+  Full gateway suite `clean verify`: 55 tests, 0 failures (one run).
+
+## Phase 5 gate review (2026-11-03, NOT CLOSED)
+
+Every ROADMAP Phase 5 criterion checked against recorded evidence only. All
+ten units are `VERIFIED` individually; the gate stays open for the reasons
+under "Open items".
+
+Per-unit acceptance criteria (guidebook, request collection, normal and
+failure path, expected results, automated test, evidence):
+
+| Unit | Guidebook | Requests | Automated tests | Live evidence |
+| --- | --- | --- | --- | --- |
+| 5.1 Dynamic routing | 01 | gateway-dynamic-routing.http | DynamicRoutingGatewayTest 9 | health, routes |
+| 5.2 JWT and roles | 02 | gateway-jwt-auth.http | JwtAuthenticationGatewayTest 9, ProductionProfileSecurityTest 1, JwtServiceTest 2 | login 200 / old default 401 |
+| 5.3 Rate limiting | 03 | gateway-rate-limiting.http | RateLimitingGatewayTest 2, UserOrIpKeyResolverTest 4 | real Redis: 21x 429 of 80; later 40x 429 of 80 |
+| 5.4 Circuit breaker | 04 | gateway-circuit-breaker.http | CircuitBreakerGatewayTest 3 | catalog stopped: 503, recovery 200 |
+| 5.5 Load balancing | 05 | gateway-load-balancing.http | LoadBalancingGatewayTest 1 | two containers, 10 and 10 of 20 |
+| 5.6 Timeout and retry | 06 | gateway-retry-timeout.http | RetryTimeoutGatewayTest 4 | failover 12/12, hung downstream 503 in 3.4 s |
+| 5.7 Request ID | 07 | gateway-request-id.http | RequestIdGatewayTest 5 | header checks |
+| 5.8 Tracing | 08 | gateway-tracing.http | TracingGatewayTest 2 | same trace id in gateway and catalog logs |
+| 5.9 Error contract | 09 | gateway-error-contract.http | ErrorContractGatewayTest 6 | 404, 401, 429, 503 bodies |
+| 5.10 API versioning | 10 | gateway-api-versioning.http | ApiVersioningGatewayTest 6 | v1, alias, no token, v9 |
+
+Special safeguards:
+
+- No automatic retry of non-idempotent writes: `VERIFIED` (RetryTimeoutGatewayTest
+  POST sent once; retry is GET only).
+- A fallback never reports a write as successful: `VERIFIED` (CircuitBreakerGatewayTest
+  failed POST returns 503, sent once; live POST during the outage 503).
+- Internal Actuator, Eureka and administrative endpoints are not publicly routed:
+  `VERIFIED` live on 2026-11-03 against the rebuilt stack. Through the gateway,
+  `/actuator/env`, `/actuator/metrics`, `/actuator/gateway/routes`, `/eureka/apps`,
+  `/api/v1/actuator/health`, `/api/actuator/health` and `/api/v1/eureka/apps` all
+  returned 404 with and without a token. Only `/actuator/health` and
+  `/actuator/info` of the gateway itself answer 200 (its own endpoints, by
+  design). Published host ports: gateway 127.0.0.1:8080 and discovery
+  127.0.0.1:8761 only.
+- Rate-limit keys do not trust client headers: `VERIFIED` (UserOrIpKeyResolverTest,
+  spoofed `X-User-Id` ignored).
+- Load balancing used two real instances with observed distribution: `VERIFIED`
+  (unit 5.5).
+
+Defect found and fixed during this review: `application.yml` still carried the
+three unit 5.1 routes, so the running jar had six routes, each id twice, and
+the yml copies had no rate limiter, breaker or retry. The Java routes won only
+by list order. Found by starting the built jar and reading
+`/actuator/gateway/routes` (6 routes; the yml copies listed with no filters).
+The tests could not see it because `src/test/resources/application.yml`
+shadows the main file. Fix: the yml routes were removed; `RouteDefinitionTest`
+(2 tests) asserts unique route ids with at least 5 filters each and that the
+main `application.yml` defines no routes (it failed on the yml test before the
+fix). After the fix the real jar lists 3 routes. Full gateway suite: 57 tests,
+0 failures.
+
+ADR 0003 obligations carried from Phase 2:
+
+- Root user not seeded in the production profile: `VERIFIED` for the gateway,
+  the only place an account exists. There is no database seeding of users; the
+  root and demo accounts live in memory, built from `ROOT_USERNAME`,
+  `ROOT_PASSWORD`, `DEMO_USER_PASSWORD` (environment only, no defaults,
+  BCrypt hashed). `ProductionProfileSecurityTest` shows `/api/v1/auth/login`
+  returns 404 under `prod`.
+- The same test is the "production profile does not create the demo root
+  user" check.
+- Gap: ADR 0003 and ROADMAP section 2 say every service must still enforce
+  authorization where appropriate. Catalog and warehouse contain no security
+  code; they trust the gateway. They are not published to the host, so they
+  are reachable only on the Docker network `stockflow`, but any container on
+  that network can call them without a token. This is an open item (below).
+
+Re-run of all builds on 2026-11-03: api-gateway 57, catalog-service 19,
+warehouse-service 17, discovery-server 1 tests, all with 0 failures,
+`clean verify` BUILD SUCCESS on each (one run each, Windows, JDK 21).
+
+Observation: right after a gateway restart, the first request to a route can
+return 503 for a short time (observed once for `/api/v1/warehouses`, about
+45 s after start) because the gateway reports healthy before it has loaded the
+Eureka registry; it returned 200 on the next attempt. The compose health check
+does not cover this. Not fixed.
+
+Open items (why the gate is not closed):
+
+1. CI has not run on units 5.4-5.10 or the fixes in this review: the work is on
+   the local branch `feat/gateway-circuit-breaker`, not pushed. Earlier gates
+   closed with a recorded green Actions run; this one needs the same.
+2. Service-level authorization (ADR 0003 gap above) needs a decision: accept
+   network isolation for the lab and record it in an ADR, or add token or
+   header verification to catalog and warehouse.
+3. Startup readiness of the gateway (observation above), minor.
+4. Carried notes: Spring Boot 3.5 and Spring Cloud 2025.0 are past OSS end of
+   support; tracing has no exporter (Phase 10); the circuit breaker state and
+   load balancer cache are per gateway instance.
+
+- 2026-11-03: service-level JWT verification in catalog and warehouse
+  (Phase 5 gate open item 2, decided by the user: "services verify the
+  JWT"; ADR 0007). Added `spring-boot-starter-oauth2-resource-server` and
+  `spring-security-test` (test scope), both managed by the Spring Boot BOM, to
+  catalog-service and warehouse-service. Each service has a `security` package
+  (`JwtProperties`, `SecurityConfig`): HS256 decoder from
+  `stockflow.security.jwt.secret` (no default, fail fast under 32 bytes),
+  issuer `stockflow-gateway`, roles from the `roles` claim; GET on `/api/v1/**`
+  needs ROLE_USER or ROLE_ADMIN, other methods need ROLE_ADMIN; health, info and
+  the API documents are open; everything else denied; 401 and 403 are
+  problem+json. Compose passes `JWT_SECRET` to both services (required) and to
+  `catalog-2` in `compose.labs.yaml`. Tests first: `CatalogSecurityTest` and
+  `WarehouseSecurityTest` (12 each) failed before the config; they cover no
+  token, forged signature, expired, wrong issuer, USER read, USER write 403,
+  ADMIN write, token without roles, a forged `X-User-Roles` header, open
+  health and docs, and denied unknown and actuator paths. `SecurityConfigTest`
+  (2 each) covers the missing or short key. Existing API tests keep running
+  through the real filter chain with an admin token added by `TestAuthConfig`.
+  `clean verify`: catalog-service 33 tests, warehouse-service 31 tests, 0
+  failures each (one run each).
+  A real defect found by the live run, not by any unit test: the gateway's
+  JJWT signs with an algorithm chosen from the key length, so the 63-byte
+  `JWT_SECRET` produced HS384 tokens and the services (HS256, as ADR 0006
+  specifies) answered 401 to valid logins. The service tests missed it because
+  `TestTokens` forces HS256. Fix: `signWith(signingKey, Jwts.SIG.HS256)` in the
+  gateway `JwtService`; `JwtServiceTest.signsWithHs256WhateverTheKeyLength`
+  (32, 63 and 80 byte keys) failed before the fix. Gateway `clean verify`: 58
+  tests, 0 failures.
+  Live on the rebuilt stack (wget from inside the gateway container straight to
+  the services, plus calls through the gateway): catalog and warehouse without a
+  token 401; with a demo-user (ROLE_USER) token GET 200; ROLE_USER POST 403;
+  root (ROLE_ADMIN) token GET 200; catalog health 200 without a token; through
+  the gateway products, warehouses and categories 200 for the user, and an
+  admin POST of a warehouse 201. Single run, local machine.
+  Side effect: that POST left one demo row (code `AUTH-<number>`) in the
+  compose warehousedb.
+  Limits: one shared HS256 secret now sits in three services (asymmetric keys
+  are the upgrade); the code is duplicated in the two services on purpose; the
+  document endpoints are open inside the network; running a service on the host
+  needs `STOCKFLOW_SECURITY_JWT_SECRET` set. Gate open item 2 is closed by this
+  change; item 1 (CI run) and the minor startup observation remain.
+
+## Phase 5 gate closure (2026-11-03)
+
+CI evidence for the whole Phase 5 branch: GitHub Actions run 41580832608
+(pull_request event, PR 3) on commit `802148f`, matched to the PR head sha
+before use, concluded success with 4 of 4 matrix jobs passing (discovery,
+api-gateway, catalog-service, warehouse-service).
+
+Open items from the gate review above, now:
+
+1. CI run on units 5.4-5.10 and the fixes: closed by run 41580832608.
+2. Service-level authorization: closed by ADR 0007 (catalog and warehouse
+   verify the JWT; evidence in the entry above).
+3. Gateway startup readiness (503 on the first request about 45 s after a
+   restart, observed once): still open, minor, not fixed.
+4. Carried notes unchanged: Spring Boot 3.5 and Spring Cloud 2025.0 past OSS end
+   of support; tracing has no exporter (Phase 10); circuit breaker state and the
+   load balancer cache are per gateway instance; one shared HS256 secret in
+   three services.
+
+Phase 5 overall: `VERIFIED`, gate closed, with open item 3 and the carried notes
+recorded as honest limits, not gate failures. Next: Phase 6 (Redis and caching
+labs).
