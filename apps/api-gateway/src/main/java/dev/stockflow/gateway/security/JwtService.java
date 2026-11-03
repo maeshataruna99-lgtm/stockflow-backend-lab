@@ -37,7 +37,7 @@ public class JwtService {
                 .issuer(properties.getIssuer())
                 .issuedAt(now)
                 .expiration(expiry)
-                .signWith(signingKey)
+                .signWith(signingKey, Jwts.SIG.HS256) // explicit: JJWT would otherwise pick HS384/HS512 for longer keys
                 .compact();
     }
 
