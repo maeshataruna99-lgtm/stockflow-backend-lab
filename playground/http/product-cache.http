@@ -1,0 +1,44 @@
+### Product cache-aside (Phase 6, unit 6.1)
+### Start the lab stack: docker compose -f compose.yaml -f compose.labs.yaml up --build -d
+### Passwords come from .env.
+
+@gatewayUrl = http://localhost:8080
+
+### 1. Login as the admin (root) to read and change products
+# @name adminLogin
+POST {{gatewayUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "root",
+  "password": "<ROOT_PASSWORD from .env>"
+}
+
+@adminToken = {{adminLogin.response.body.accessToken}}
+
+### 2. First read: a miss, the database answers and Redis now holds the copy.
+### Check: docker compose exec -T redis redis-cli TTL catalog:product:v1:1   (about 60)
+GET {{gatewayUrl}}/api/v1/products/1
+Authorization: Bearer {{adminToken}}
+
+### 3. Second read: a hit (catalog.cache{result=hit} goes up by one).
+GET {{gatewayUrl}}/api/v1/products/1
+Authorization: Bearer {{adminToken}}
+
+### 4. Update: after the commit the key is removed, the next read is fresh from the database.
+PATCH {{gatewayUrl}}/api/v1/products/1
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "description": "edited from the cache lab"
+}
+
+### 5. Read again: a miss that returns the new description.
+GET {{gatewayUrl}}/api/v1/products/1
+Authorization: Bearer {{adminToken}}
+
+### 6. Redis failure: docker compose stop redis, then send request 5 again.
+### Expect 200 from the database in under a second. Undo with: docker compose start redis
+GET {{gatewayUrl}}/api/v1/products/1
+Authorization: Bearer {{adminToken}}

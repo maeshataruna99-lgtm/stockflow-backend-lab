@@ -24,14 +24,14 @@ Live, from the repository root:
 docker compose -f compose.yaml -f compose.labs.yaml up --build -d
 ```
 
-Check that Eureka lists two `UP` instances of `CATALOG-SERVICE` (`http://localhost:8761`). Read the count on each instance, send requests through the gateway, read the counts again:
+The metrics endpoint needs an admin token since catalog verifies the JWT itself (ADR 0007): log in as root through the gateway and pass the token as shown. Check that Eureka lists two `UP` instances of `CATALOG-SERVICE` (`http://localhost:8761`). Read the count on each instance, send requests through the gateway, read the counts again:
 
 ```bash
-docker compose -f compose.yaml -f compose.labs.yaml exec -T catalog wget -qO- "http://localhost:8081/actuator/metrics/http.server.requests?tag=uri:/api/v1/products"
+docker compose -f compose.yaml -f compose.labs.yaml exec -T catalog wget -qO- "--header=Authorization: Bearer <admin token>" "http://localhost:8081/actuator/metrics/http.server.requests?tag=uri:/api/v1/products"
 ```
 
 ```bash
-docker compose -f compose.yaml -f compose.labs.yaml exec -T catalog-2 wget -qO- "http://localhost:8081/actuator/metrics/http.server.requests?tag=uri:/api/v1/products"
+docker compose -f compose.yaml -f compose.labs.yaml exec -T catalog-2 wget -qO- "--header=Authorization: Bearer <admin token>" "http://localhost:8081/actuator/metrics/http.server.requests?tag=uri:/api/v1/products"
 ```
 
 Requests are in `playground/http/gateway-load-balancing.http`. Remove the lab instance afterwards:

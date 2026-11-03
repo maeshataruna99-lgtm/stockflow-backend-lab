@@ -107,7 +107,7 @@ See [playground/http/gateway-rate-limiting.http](file:///c:/Users/Cinder/IdeaPro
 | **Sustained DoS Attack** | Requests arrive faster than replenish rate after burst tokens are spent. | Immediate `429 Too Many Requests` issued by gateway; downstream CPU and DB stay safe. |
 | **Spoofed Identity Header** | Attacker sends `X-User-Id: victim-account` to deplete victim's quota. | `UserOrIpKeyResolver` only reads from internal authenticated exchange attributes, completely ignoring raw client headers. Attacker's own IP is throttled instead. |
 | **Shared Public NAT / Proxy IP** | Thousands of office users share one public IP address. | Authenticated requests resolve to `user:<userId>`, giving each user their own dedicated bucket regardless of shared IP. |
-| **Redis Outage / Unavailability** | Redis connection drops or times out. | By default, Spring Cloud Gateway `RedisRateLimiter` can be configured with deny-all or allow-all fallback. In mission-critical enterprise environments, circuit breakers or degraded pass-through with alert metrics are implemented. |
+| **Redis Outage / Unavailability** | Redis connection drops or times out. | Verified in Phase 6: `spring.data.redis.timeout` and `connect-timeout` are 300 ms, and `RedisRateLimiter` fails open, so the request is let through after about 0.3 s. Before those settings existed, every request waited about 60 s (Lettuce default) and then passed; the rate limit is not enforced while Redis is down. |
 
 ---
 

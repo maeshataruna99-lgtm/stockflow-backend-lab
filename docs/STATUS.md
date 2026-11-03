@@ -1190,3 +1190,60 @@ Open items from the gate review above, now:
 Phase 5 overall: `VERIFIED`, gate closed, with open item 3 and the carried notes
 recorded as honest limits, not gate failures. Next: Phase 6 (Redis and caching
 labs).
+
+## Phase 6 progress log
+
+- 2026-11-03: unit 6.1 (cache-aside, invalidation after commit, Redis
+  failure) `VERIFIED`. Added `spring-boot-starter-data-redis` to
+  catalog-service (version from the Spring Boot BOM, approved by the user).
+  `ProductCache` (package `cache`): `getOrLoad` for `GET /api/v1/products/{id}`
+  with key `catalog:product:v1:<id>`, JSON value, TTL `stockflow.cache.product-ttl`
+  (60 s), counter `catalog.cache{cache=product,result=hit|miss|error}`;
+  `evictAfterCommit` registered by `ProductService.update` as a transaction
+  synchronization; 404 never cached; Redis errors counted and logged, the
+  request served from the database, and no write-back after a failed read.
+  Settings: `spring.data.redis.timeout` and `connect-timeout` 300 ms,
+  `management.health.redis.enabled: false`, `stockflow.cache.enabled`.
+  Tests first (they failed before the code): `ProductCacheTest` against real
+  `redis:7.4.12-alpine` and PostgreSQL containers (miss then hit with TTL <= 30 s,
+  PATCH evicts and the next read is fresh, a rolled-back update keeps the
+  entry, 404 not cached), `ProductCacheRedisDownTest` (Redis port closed: GET
+  200 from the database with exactly one error counted, PATCH 200),
+  `RedisTimeoutConfigTest` (timeouts and health setting present in the main
+  yml, read from the file because `src/test/resources/application.yml`
+  shadows it). `CatalogSecurityTest` gained a metrics test (admin only) and the
+  test profile mirrors the health setting. catalog-service `clean verify`: 43
+  tests, 0 failures. Gateway `clean verify`: 59 tests, 0 failures.
+  Live on the lab stack (rebuilt catalog and gateway, calls through the
+  gateway, counters read from the catalog metrics endpoint with an admin
+  token): after deleting the key, three reads gave miss +1 and hit +2 (109,
+  70 and 74 ms); `redis-cli TTL` showed 58; the stored value was the product
+  JSON; PATCH returned 200 and the key was gone (`EXISTS` 0), the next GET
+  returned the edited description and recreated the key.
+  Defect found by the outage run, in the gateway (unit 5.3, never tested
+  against a Redis outage): with Redis stopped every request through the
+  gateway took 60.5-61.0 s (4 requests measured: 60967, 60733, 60690 and 60499
+  ms) before the rate limiter failed open and returned 200, because the
+  gateway had no Redis timeout (Lettuce default 60 s). Fix:
+  `spring.data.redis.timeout` and `connect-timeout` 300 ms in the gateway
+  `application.yml`, guarded by `RedisTimeoutConfigTest` (failed before). After the
+  fix, with Redis stopped: GET 723, 737 and 758 ms, PATCH 938 ms, catalog health
+  still UP, and 62, 76 and 59 ms right after Redis was started again. The 0.7 s
+  is the gateway timeout plus the catalog read timeout (300 ms each) plus the
+  database read. Redis outage also means the rate limit is not enforced
+  (fail open); guidebook 03 now says so.
+  Observation: the very first GET after a catalog restart took 1.77-1.79 s
+  (cold start), longer than the gateway response timeout of 1 s, so the
+  gateway retried it and the catalog counted two misses for one client
+  request (miss +2, hit +2 over three reads). This is a small natural
+  stampede and is the starting point of unit 6.3.
+  Other changes: the admin metrics rule (`/actuator/metrics/**` needs ROLE_ADMIN
+  in catalog; the lab override exposes the endpoint), `SPRING_DATA_REDIS_HOST: redis`
+  for `catalog` and `catalog-2`, guidebook 05 commands now carry an admin
+  token (they broke when catalog started verifying tokens, ADR 0007), guidebook
+  11 and `playground/http/product-cache.http`.
+  Side effects on the compose catalogdb: product 1 `updated_at` advanced and its
+  description was edited and restored to the original text.
+  Limits: only the product by id is cached (lists and searches are not);
+  the reader/writer race can leave a stale copy for up to the TTL; one
+  single run on this machine; 6.2-6.4 not started.

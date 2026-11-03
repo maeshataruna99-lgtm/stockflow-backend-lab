@@ -41,6 +41,7 @@ as an open item.
 - One symmetric secret is now held by three services. A leak of any one lets
   its holder mint tokens; moving to an asymmetric key (services hold only the
   public key) is the upgrade path and is not done.
+- Catalog also lets ROLE_ADMIN read `/actuator/metrics/**` (exposed only by the lab override, never by default).
 - Running a service on the host (`mvnw spring-boot:run`) needs
   `STOCKFLOW_SECURITY_JWT_SECRET` in its environment.
 - The gateway must sign with HS256 explicitly. JJWT otherwise chooses the
