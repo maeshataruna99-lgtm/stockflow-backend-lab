@@ -865,3 +865,6 @@ configuration question.
   the old hardcoded default returned 401. `.env` values are random and
   were never printed. The earlier STATUS entries that quote the old
   defaults describe the state at that time.
+- 2026-11-03: CI evidence for units 5.2 and 5.3 and the secrets fix: Actions
+  run 41566713553 on commit `dea268f` (PR 2 branch head) concluded success,
+  4 of 4 checks passing. PR 2 merged to main as `6b86965`.
