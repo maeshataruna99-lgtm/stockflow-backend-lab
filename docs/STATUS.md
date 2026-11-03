@@ -41,7 +41,7 @@ documentation with an opt-in hostdev override (unit 4.3); gate review
 below. Phase 5 - API gateway and its ten use cases: `IN PROGRESS` - units 5.1
 (Dynamic Routing), 5.2 (JWT Authentication & Role Authorization) and 5.3
 (Redis-backed rate limiting) `VERIFIED` (evidence below; 5.3 against real
-Redis on 2026-11-03); unit 5.4 (circuit breaker) `VERIFIED` 2026-11-03; 5.5 (load balancing) `VERIFIED` 2026-11-03; unit 5.6 (timeout and retry) is next.
+Redis on 2026-11-03); unit 5.4 (circuit breaker) `VERIFIED` 2026-11-03; 5.5 (load balancing) `VERIFIED` 2026-11-03; 5.6 (timeout and retry) `VERIFIED` 2026-11-03; unit 5.7 (request ID and transformation) is next.
 Phase 0 evidence below remains the gate.
 
 ## Last verified commit
@@ -910,3 +910,34 @@ configuration question.
   circuit state and the instance cache are per gateway instance.
   The lab instance was removed afterwards and the core stack restored
   (6 containers healthy).
+
+- 2026-11-03: unit 5.6 (timeout and bounded retry for safe operations)
+  `VERIFIED`. Tests written first: 3 of the 4 new tests failed before the
+  change (retry missing). Implementation: retry filter inside the circuit
+  breaker on all three routes, GET only, statuses 502/503/504 plus timeouts and
+  I/O errors, 2 retries with exponential backoff (`RetryProperties`,
+  `stockflow.gateway.retry.*`); gateway HTTP client connect-timeout 2000 ms and
+  response-timeout 1s in `application.yml`; circuit breaker timeout raised from
+  2 s to 5 s so it covers all attempts. `RetryTimeoutGatewayTest`, run twice
+  (4 tests, 0 failures each time): flaky GET retried to 200 with 2 hits;
+  always-503 GET sent 3 times then 503; POST with 503 sent once; slow
+  downstream attempted 3 times then 503. Live (compose labs, rebuilt gateway,
+  two catalog instances): both up 6/6 200; right after `stop catalog-2`,
+  12/12 requests were 200 (unit 5.5 measured 5x 200 and 7x 503 for the same
+  step before retry existed); with the only catalog instance `docker pause`d, one
+  GET returned 503 after 3402 ms (3 x 1 s response timeout plus backoff), which
+  also proves the production timeout values are loaded. Single run, local
+  machine. Notes: the first draft of the timeout test passed only because it set
+  its own 300 ms timeout; `src/test/resources/application.yml` shadows the main
+  one, so timeout settings are repeated in the test properties. A first run of
+  the flaky-retry test with a 300 ms timeout once counted 3 hits instead of 2,
+  most likely a cold-start timeout; it was stable at 1 s (2 runs). Limits: retries
+  are not jittered by this configuration beyond reactor's default backoff
+  behaviour (not measured); no idempotency keys, so writes are never retried.
+  Core stack restored afterwards.
+  Full gateway suite after this unit: `clean verify` 36 tests, 0 failures,
+  run twice. One earlier full run failed once in
+  `CircuitBreakerGatewayTest.failedWriteReturns503AndIsSentOnce` (the POST never
+  reached WireMock, consistent with its 300 ms breaker timeout firing on a slow
+  cold start); that test's timeout was raised to 1 s and its slow stub to 3 s,
+  and the suite then passed twice.

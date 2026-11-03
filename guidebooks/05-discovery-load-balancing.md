@@ -42,7 +42,7 @@ docker compose -f compose.yaml -f compose.labs.yaml rm -sf catalog-2
 
 ## 4. Failure path
 
-Stop one instance (`docker compose -f compose.yaml -f compose.labs.yaml stop catalog-2`) and keep sending requests. The gateway keeps a cached instance list, so for a short time it still picks the stopped instance. Those requests fail and the circuit breaker (unit 5.4) answers 503. After the cache refreshes, all requests go to the surviving instance. There is no failover to the other instance yet; bounded retry for safe reads is use case 6.
+Stop one instance (`docker compose -f compose.yaml -f compose.labs.yaml stop catalog-2`) and keep sending requests. The gateway keeps a cached instance list, so for a short time it still picks the stopped instance. Those requests fail and the circuit breaker (unit 5.4) answers 503. After the cache refreshes, all requests go to the surviving instance. Since unit 5.6, a failed GET is retried and the retry goes to the other instance (see guidebook 06); writes are not.
 
 ## 5. Trade-offs
 
