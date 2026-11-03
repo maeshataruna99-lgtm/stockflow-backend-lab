@@ -39,3 +39,28 @@ services:
     networks:
       - stockflow
     restart: unless-stopped
+
+  # Eviction lab (unit 6.2): a separate, memory-capped Redis, so the experiment cannot evict the gateway's
+  # rate-limit keys or the product cache. Not started by default; run labs/caching/eviction-lab.sh, or:
+  #   LAB_REDIS_POLICY=allkeys-lru docker compose -f compose.yaml -f compose.labs.yaml --profile eviction up -d redis-lab
+  redis-lab:
+    image: redis:7.4.12-alpine
+    container_name: stockflow-redis-lab
+    profiles: ["eviction"]
+    command:
+      - redis-server
+      - --maxmemory
+      - ${LAB_REDIS_MAXMEMORY:-8mb}
+      - --maxmemory-policy
+      - ${LAB_REDIS_POLICY:-allkeys-lru}
+      - --maxmemory-samples
+      - "10"
+      - --appendonly
+      - "no"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - stockflow
