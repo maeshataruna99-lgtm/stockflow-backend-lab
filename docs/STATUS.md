@@ -1125,3 +1125,45 @@ Open items (why the gate is not closed):
 4. Carried notes: Spring Boot 3.5 and Spring Cloud 2025.0 are past OSS end of
    support; tracing has no exporter (Phase 10); the circuit breaker state and
    load balancer cache are per gateway instance.
+
+- 2026-11-03: service-level JWT verification in catalog and warehouse
+  (Phase 5 gate open item 2, decided by the user: "services verify the
+  JWT"; ADR 0007). Added `spring-boot-starter-oauth2-resource-server` and
+  `spring-security-test` (test scope), both managed by the Spring Boot BOM, to
+  catalog-service and warehouse-service. Each service has a `security` package
+  (`JwtProperties`, `SecurityConfig`): HS256 decoder from
+  `stockflow.security.jwt.secret` (no default, fail fast under 32 bytes),
+  issuer `stockflow-gateway`, roles from the `roles` claim; GET on `/api/v1/**`
+  needs ROLE_USER or ROLE_ADMIN, other methods need ROLE_ADMIN; health, info and
+  the API documents are open; everything else denied; 401 and 403 are
+  problem+json. Compose passes `JWT_SECRET` to both services (required) and to
+  `catalog-2` in `compose.labs.yaml`. Tests first: `CatalogSecurityTest` and
+  `WarehouseSecurityTest` (12 each) failed before the config; they cover no
+  token, forged signature, expired, wrong issuer, USER read, USER write 403,
+  ADMIN write, token without roles, a forged `X-User-Roles` header, open
+  health and docs, and denied unknown and actuator paths. `SecurityConfigTest`
+  (2 each) covers the missing or short key. Existing API tests keep running
+  through the real filter chain with an admin token added by `TestAuthConfig`.
+  `clean verify`: catalog-service 33 tests, warehouse-service 31 tests, 0
+  failures each (one run each).
+  A real defect found by the live run, not by any unit test: the gateway's
+  JJWT signs with an algorithm chosen from the key length, so the 63-byte
+  `JWT_SECRET` produced HS384 tokens and the services (HS256, as ADR 0006
+  specifies) answered 401 to valid logins. The service tests missed it because
+  `TestTokens` forces HS256. Fix: `signWith(signingKey, Jwts.SIG.HS256)` in the
+  gateway `JwtService`; `JwtServiceTest.signsWithHs256WhateverTheKeyLength`
+  (32, 63 and 80 byte keys) failed before the fix. Gateway `clean verify`: 58
+  tests, 0 failures.
+  Live on the rebuilt stack (wget from inside the gateway container straight to
+  the services, plus calls through the gateway): catalog and warehouse without a
+  token 401; with a demo-user (ROLE_USER) token GET 200; ROLE_USER POST 403;
+  root (ROLE_ADMIN) token GET 200; catalog health 200 without a token; through
+  the gateway products, warehouses and categories 200 for the user, and an
+  admin POST of a warehouse 201. Single run, local machine.
+  Side effect: that POST left one demo row (code `AUTH-<number>`) in the
+  compose warehousedb.
+  Limits: one shared HS256 secret now sits in three services (asymmetric keys
+  are the upgrade); the code is duplicated in the two services on purpose; the
+  document endpoints are open inside the network; running a service on the host
+  needs `STOCKFLOW_SECURITY_JWT_SECRET` set. Gate open item 2 is closed by this
+  change; item 1 (CI run) and the minor startup observation remain.

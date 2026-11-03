@@ -46,9 +46,9 @@ Key documents:
   implemented and verified locally (dynamic routing, JWT authentication and
   roles, Redis rate limiting, circuit breaker, load balancing, timeout and
   GET-only retry, request ID, tracing in logs, one error contract, API
-  versioning; 57 gateway tests). The gate is not closed: CI has not run on
-  units 5.4-5.10, and the catalog and warehouse services do not enforce
-  authorization themselves (details in [docs/STATUS.md](docs/STATUS.md)).
+  versioning; 58 gateway tests). Catalog and warehouse verify the JWT
+  themselves (ADR 0007). The gate is not closed: CI has not run on this work
+  yet (details in [docs/STATUS.md](docs/STATUS.md)).
 - Phases 6-10: NOT STARTED. Caching, database, resilience, messaging and
   observability labs follow the ROADMAP order.
 
@@ -147,6 +147,10 @@ docker compose -f compose.yaml -f compose.hostdev.yaml up -d postgres
 `compose.hostdev.yaml` publishes postgres on 127.0.0.1:15432 only. It is an
 opt-in debugging aid, never part of the default stack, and the Java services
 in compose ignore it entirely.
+
+A host-run catalog or warehouse also needs the token key in its environment
+(`STOCKFLOW_SECURITY_JWT_SECRET`, same value as `JWT_SECRET`), because both
+services verify the gateway's JWT themselves (ADR 0007).
 
 ## Security caveats
 

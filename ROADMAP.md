@@ -415,7 +415,7 @@ CI runs 40674415027 and 40674854953 all green).
 
 Status: `IN PROGRESS` (all ten units `VERIFIED`: 5.1-5.3 on 2026-10-29, 5.4-5.10 on 2026-11-03).
 Gate review 2026-11-03 is written up in `docs/STATUS.md` and the gate is NOT closed: CI has not run on
-units 5.4-5.10, and catalog and warehouse do not enforce authorization themselves (open decision).
+units 5.4-5.10 and the service-level JWT work (ADR 0007; the authorization gap from the review is closed).
 
 Implement and test these individually:
 
