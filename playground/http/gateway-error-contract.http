@@ -1,0 +1,31 @@
+### Centralized error contract (unit 5.9)
+### Every gateway-produced error is application/problem+json with requestId. Passwords come from .env.
+
+@gatewayUrl = http://localhost:8080
+
+### 1. Login
+# @name userLogin
+POST {{gatewayUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "demo-user",
+  "password": "<DEMO_USER_PASSWORD from .env>"
+}
+
+@userToken = {{userLogin.response.body.accessToken}}
+
+### 2. 404: no route. Body: title "Not Found", detail "No route matches this request.", requestId.
+GET {{gatewayUrl}}/no-such-route
+Authorization: Bearer {{userToken}}
+
+### 3. 401: no token. Body keeps type urn:stockflow:problem:missing-token and has requestId.
+GET {{gatewayUrl}}/api/v1/products
+
+### 4. 429: send request 5 many times at once. Body: title "Too Many Requests", requestId.
+GET {{gatewayUrl}}/api/v1/products
+Authorization: Bearer {{userToken}}
+
+### 5. 503: docker compose stop catalog, then send this. Body: title "Service Unavailable", requestId.
+GET {{gatewayUrl}}/api/v1/categories
+Authorization: Bearer {{userToken}}

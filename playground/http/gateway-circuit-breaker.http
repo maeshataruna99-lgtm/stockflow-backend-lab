@@ -21,7 +21,7 @@ Authorization: Bearer {{userToken}}
 
 ### 3. Stop the catalog first: docker compose stop catalog
 ### Then send this several times. Expected: 503 application/problem+json,
-### title "Service unavailable", instance "/fallback".
+### title "Service Unavailable", instance "/fallback", requestId set.
 GET {{gatewayUrl}}/api/v1/products
 Authorization: Bearer {{userToken}}
 

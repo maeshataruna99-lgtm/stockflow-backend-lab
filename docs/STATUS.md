@@ -41,7 +41,7 @@ documentation with an opt-in hostdev override (unit 4.3); gate review
 below. Phase 5 - API gateway and its ten use cases: `IN PROGRESS` - units 5.1
 (Dynamic Routing), 5.2 (JWT Authentication & Role Authorization) and 5.3
 (Redis-backed rate limiting) `VERIFIED` (evidence below; 5.3 against real
-Redis on 2026-11-03); unit 5.4 (circuit breaker) `VERIFIED` 2026-11-03; 5.5 (load balancing) `VERIFIED` 2026-11-03; 5.6 (timeout and retry) `VERIFIED` 2026-11-03; 5.7 (request ID) `VERIFIED` 2026-11-03; 5.8 (tracing) `VERIFIED` 2026-11-03; unit 5.9 (error contract) is next.
+Redis on 2026-11-03); unit 5.4 (circuit breaker) `VERIFIED` 2026-11-03; 5.5 (load balancing) `VERIFIED` 2026-11-03; 5.6 (timeout and retry) `VERIFIED` 2026-11-03; 5.7 (request ID) `VERIFIED` 2026-11-03; 5.8 (tracing) `VERIFIED` 2026-11-03; 5.9 (error contract) `VERIFIED` 2026-11-03; unit 5.10 (API versioning) is next.
 Phase 0 evidence below remains the gate.
 
 ## Last verified commit
@@ -981,3 +981,29 @@ configuration question.
   so spans are not viewable as a tree (Phase 10); warehouse got the same
   dependency and passes its tests but was not exercised live; the debug env vars
   in `compose.labs.yaml` are lab-only; sampling 1.0 is a lab value.
+
+- 2026-11-03: unit 5.9 (centralized error contract without leaking internals)
+  `VERIFIED`. Tests written first (they did not compile before the change).
+  Added `ProblemWriter` (RFC 7807 body: type, title = reason phrase, status,
+  fixed detail per status, requestId), `GatewayErrorHandler` (`@Order(-2)`,
+  any exception becomes a problem, the real cause is logged, not returned) and
+  `RateLimitProblemFilter` (gives the limiter empty 429 the same body).
+  `JwtAuthenticationFilter` and `FallbackController` now use the same writer
+  and texts. One real defect found by the test: a 404 for an unknown path
+  carried no request ID because no route means no gateway filter chain; fixed
+  by making `RequestIdFilter` a `WebFilter`. Deliberate contract change: the
+  503 title is now the reason phrase "Service Unavailable" (was "Service
+  unavailable"), and two assertions in `CircuitBreakerGatewayTest` were updated
+  to match. `ErrorContractGatewayTest`: 6 tests. Full gateway suite
+  `clean verify`: 49 tests, 0 failures (one run). Live on the rebuilt gateway:
+  404 body with title "Not Found", detail "No route matches this request." and
+  requestId equal to the X-Request-Id header; 401 kept its
+  `urn:stockflow:problem:missing-token` type and gained requestId; with real
+  Redis an 80-request async burst gave 40x 200 and 40x 429, and a 429 body was
+  `application/problem+json` with requestId and `X-RateLimit-Remaining: 0`;
+  with `catalog` stopped, the 503 returned the problem body with requestId and
+  no host name. Single run, local machine. Limits: errors produced by catalog
+  and warehouse are passed through unchanged, so their shape can differ; the 500
+  path is proven by a unit-level test of the handler, not by a live fault; the
+  429 decorator wraps `setComplete()` of the limiter and needs a retest if the
+  limiter filter is replaced.
