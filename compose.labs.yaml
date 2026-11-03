@@ -17,6 +17,11 @@ services:
     environment:
       LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_CLOUD_GATEWAY_HANDLER: DEBUG
 
+  # race condition lab (unit 7.1): switches on the deliberately broken withdraw endpoint, never in the core file
+  warehouse:
+    environment:
+      STOCKFLOW_LAB_UNSAFE_STOCK: "true"
+
   catalog-2:
     build: ./apps/catalog-service
     image: stockflow/catalog-service:0.0.1-SNAPSHOT
