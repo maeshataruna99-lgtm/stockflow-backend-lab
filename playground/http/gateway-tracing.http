@@ -1,0 +1,28 @@
+### Distributed tracing (unit 5.8)
+### Start with request-level logs: docker compose -f compose.yaml -f compose.labs.yaml up --build -d
+### Passwords come from .env.
+
+@gatewayUrl = http://localhost:8080
+
+### 1. Login
+# @name userLogin
+POST {{gatewayUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "demo-user",
+  "password": "<DEMO_USER_PASSWORD from .env>"
+}
+
+@userToken = {{userLogin.response.body.accessToken}}
+
+### 2. A request that continues a known trace. Then search the gateway and catalog logs for
+### 4bf92f3577b34da6a3ce929d0e0e4736: both show it, with different span ids.
+GET {{gatewayUrl}}/api/v1/products
+Authorization: Bearer {{userToken}}
+traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+
+### 3. Without trace context the gateway starts a new trace. Find its id in the gateway log line
+### (the second bracket group after the thread name) and search the catalog log for it.
+GET {{gatewayUrl}}/api/v1/products
+Authorization: Bearer {{userToken}}

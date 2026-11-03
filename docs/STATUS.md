@@ -41,7 +41,7 @@ documentation with an opt-in hostdev override (unit 4.3); gate review
 below. Phase 5 - API gateway and its ten use cases: `IN PROGRESS` - units 5.1
 (Dynamic Routing), 5.2 (JWT Authentication & Role Authorization) and 5.3
 (Redis-backed rate limiting) `VERIFIED` (evidence below; 5.3 against real
-Redis on 2026-11-03); unit 5.4 (circuit breaker) `VERIFIED` 2026-11-03; 5.5 (load balancing) `VERIFIED` 2026-11-03; 5.6 (timeout and retry) `VERIFIED` 2026-11-03; 5.7 (request ID) `VERIFIED` 2026-11-03; unit 5.8 (tracing) is next.
+Redis on 2026-11-03); unit 5.4 (circuit breaker) `VERIFIED` 2026-11-03; 5.5 (load balancing) `VERIFIED` 2026-11-03; 5.6 (timeout and retry) `VERIFIED` 2026-11-03; 5.7 (request ID) `VERIFIED` 2026-11-03; 5.8 (tracing) `VERIFIED` 2026-11-03; unit 5.9 (error contract) is next.
 Phase 0 evidence below remains the gate.
 
 ## Last verified commit
@@ -959,3 +959,25 @@ configuration question.
   only, because catalog and warehouse do not log it yet (structured logging is
   Phase 10); the ID is not a W3C trace context (use case 8).
   Full gateway suite after this unit: `clean verify` 41 tests, 0 failures (one run).
+
+- 2026-11-03: unit 5.8 (distributed tracing and correlation ID)
+  `VERIFIED` for log-level tracing. Added `micrometer-tracing-bridge-otel`
+  (Boot-managed version, approved by the user) to api-gateway, catalog-service
+  and warehouse-service; `management.tracing.sampling.probability: 1.0` in all
+  three; `spring.reactor.context-propagation: auto` in the gateway. Tests
+  first: both `TracingGatewayTest` tests failed before the dependency (no
+  `traceparent` downstream); after it, 2/2 pass. A first version of the test
+  passed one case only because WireMock's request journal carried over from the
+  other test; fixed with a reset in `@BeforeEach`. `clean verify` per app:
+  api-gateway 43 tests, catalog-service 19, warehouse-service 17, all with 0
+  failures. Live on the rebuilt stack (compose labs for DEBUG request logs): one
+  request through the gateway with `traceparent` trace id
+  `4bf92f3577b34da6a3ce929d0e0e4736` produced log lines with that trace id and
+  different span ids in both the gateway (`e2d5125870ae0299`) and the catalog
+  (`815209bfb063e89f`). Before `spring.reactor.context-propagation: auto` the
+  gateway lines had an empty trace slot, so that setting is required. The
+  correlation ID is `X-Request-Id` (unit 5.7); the trace id is the internal
+  identifier. Single run, local machine. Limits: no exporter, collector or Jaeger,
+  so spans are not viewable as a tree (Phase 10); warehouse got the same
+  dependency and passes its tests but was not exercised live; the debug env vars
+  in `compose.labs.yaml` are lab-only; sampling 1.0 is a lab value.

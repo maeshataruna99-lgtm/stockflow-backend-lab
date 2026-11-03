@@ -413,7 +413,7 @@ CI runs 40674415027 and 40674854953 all green).
 
 ### Phase 5 --- API Gateway and ten gateway use cases
 
-Status: `IN PROGRESS` (Units 5.1-5.3 `VERIFIED` on 2026-10-29, 5.4-5.7 on 2026-11-03; evidence in
+Status: `IN PROGRESS` (Units 5.1-5.3 `VERIFIED` on 2026-10-29, 5.4-5.8 on 2026-11-03; evidence in
 `docs/STATUS.md`).
 
 Implement and test these individually:
@@ -425,7 +425,7 @@ Implement and test these individually:
 5.  [x] **Discovery-based load balancing with two service instances** (`VERIFIED` 2026-11-03: `LoadBalancingGatewayTest` 5/5 split, `compose.labs.yaml`, live 10/10 split across two catalog containers, failure path observed, `guidebooks/05-discovery-load-balancing.md`, `playground/http/gateway-load-balancing.http`).
 6.  [x] **Timeout and bounded retry for safe/idempotent operations** (`VERIFIED` 2026-11-03: GET-only retry on 502/503/504 and timeouts, 2 retries with backoff, 1s response timeout, `RetryTimeoutGatewayTest` 4/4, live failover 12/12 200 and hung downstream 503 in 3.4s, `guidebooks/06-timeout-and-retry.md`, `playground/http/gateway-retry-timeout.http`).
 7.  [x] **Request/response transformation and trace/request ID** (`VERIFIED` 2026-11-03: `RequestIdFilter`, Server header removed, nosniff added, `RequestIdGatewayTest` 5/5, live header checks, `guidebooks/07-request-id-and-transformation.md`, `playground/http/gateway-request-id.http`).
-8.  [ ] Distributed tracing and correlation ID.
+8.  [x] **Distributed tracing and correlation ID** (`VERIFIED` 2026-11-03 for log-level tracing: Micrometer Tracing OTel bridge in gateway, catalog, warehouse; `traceparent` forwarded, same trace id in gateway and catalog logs, `TracingGatewayTest` 2/2, `guidebooks/08-distributed-tracing.md`, `playground/http/gateway-tracing.http`; span export and Jaeger are Phase 10).
 9.  [ ] Centralized error contract without leaking internals.
 10. [ ] API versioning/backward compatibility.
 
