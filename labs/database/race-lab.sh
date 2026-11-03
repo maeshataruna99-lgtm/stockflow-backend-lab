@@ -5,7 +5,7 @@
 #   docker compose -f compose.yaml -f compose.labs.yaml up --build -d
 #   labs/database/race-lab.sh <admin-token> [concurrent-requests] [starting-stock]
 #
-# For each of the two endpoints it creates a stock row, fires N requests at the same moment that each withdraw one
+# For each endpoint (unsafe, optimistic, pessimistic, and the atomic UPDATE) it creates a stock row, fires N requests at the same moment that each withdraw one
 # unit (straight at the warehouse from inside the Docker network), and prints how many were accepted and how many
 # units are left. Correct: accepted + left = starting stock, and accepted never exceeds the stock.
 # Run from the repository root.
@@ -23,7 +23,7 @@ call() { # $1 = path, $2 = method data (optional)
 }
 json_field() { sed -n "s/.*\"$1\":\([0-9]*\).*/\1/p"; }
 
-for endpoint in withdraw-unsafe withdraw; do
+for endpoint in withdraw-unsafe withdraw-optimistic withdraw-pessimistic withdraw; do
   id=$(call "" "{\"locationId\":1,\"productId\":$(date +%s%N),\"quantity\":$stock}" | json_field id)
   ok=$("${dc[@]}" exec -T gateway sh -c "
     for i in \$(seq 1 $requests); do
