@@ -34,8 +34,8 @@ public class DemoAuthController {
             JwtProperties jwtProperties,
             PasswordEncoder passwordEncoder,
             @Value("${ROOT_USERNAME:root}") String rootUsername,
-            @Value("${ROOT_PASSWORD:root_demo_password_123}") String rootPassword,
-            @Value("${DEMO_USER_PASSWORD:user_demo_password_123}") String demoUserPassword
+            @Value("${ROOT_PASSWORD}") String rootPassword,
+            @Value("${DEMO_USER_PASSWORD}") String demoUserPassword
     ) {
         this.jwtService = jwtService;
         this.jwtProperties = jwtProperties;

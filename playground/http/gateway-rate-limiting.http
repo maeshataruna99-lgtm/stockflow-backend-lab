@@ -15,7 +15,7 @@ Accept: application/json
 
 {
   "username": "demo-user",
-  "password": "user_demo_password_123"
+  "password": "<DEMO_USER_PASSWORD from .env>"
 }
 
 ### Capture user token

@@ -8,9 +8,9 @@ import org.springframework.stereotype.Component;
 public class JwtProperties {
 
     /**
-     * Secret key for HMAC-SHA256 signing (minimum 32 characters / 256 bits).
+     * Secret key for HMAC-SHA256 signing (minimum 32 characters / 256 bits); no default, supplied via JWT_SECRET.
      */
-    private String secret = "stockflow-dev-secret-key-must-be-at-least-32-bytes-long-for-hs256!";
+    private String secret;
 
     /**
      * Expiration duration in seconds (default: 3600 seconds = 1 hour).

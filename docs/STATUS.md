@@ -851,3 +851,17 @@ configuration question.
   password in source" rule in ROADMAP section 2; the compose gateway ran
   without `JWT_SECRET` set. (2) `AGENTS.md` is untracked and not in
   `.gitignore`; AGENT_RULES says it must stay local.
+- 2026-11-03: removed the default JWT signing secret and the default demo
+  passwords from the gateway (finding from the real-Redis check above).
+  `JwtService` now fails fast when the secret is missing or under 32
+  bytes; `ROOT_PASSWORD` and `DEMO_USER_PASSWORD` have no `@Value`
+  default; compose requires `JWT_SECRET`, `ROOT_USERNAME`, `ROOT_PASSWORD`
+  and `DEMO_USER_PASSWORD` (`docker compose config` fails with "required
+  variable JWT_SECRET is missing a value" when it is absent). Tests carry
+  their own fixture values in `src/test/resources/application.yml`.
+  `.\mvnw.cmd clean verify` in `apps/api-gateway`: 28 tests (2 new in
+  `JwtServiceTest`), 0 failures, BUILD SUCCESS. Live on the rebuilt
+  gateway container: login with the `.env` demo password returned 200,
+  the old hardcoded default returned 401. `.env` values are random and
+  were never printed. The earlier STATUS entries that quote the old
+  defaults describe the state at that time.

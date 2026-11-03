@@ -19,11 +19,11 @@ public class JwtService {
 
     public JwtService(JwtProperties properties) {
         this.properties = properties;
-        byte[] keyBytes = properties.getSecret().getBytes(StandardCharsets.UTF_8);
-        if (keyBytes.length < 32) {
+        String secret = properties.getSecret();
+        if (secret == null || secret.getBytes(StandardCharsets.UTF_8).length < 32) {
             throw new IllegalArgumentException("JWT secret key must be at least 32 bytes (256 bits) for HS256");
         }
-        this.signingKey = Keys.hmacShaKeyFor(keyBytes);
+        this.signingKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
     public String generateToken(String username, List<String> roles) {

@@ -15,7 +15,7 @@ Accept: application/json
 
 {
   "username": "root",
-  "password": "root_demo_password_123"
+  "password": "<ROOT_PASSWORD from .env>"
 }
 
 ### Capture root access token
@@ -29,7 +29,7 @@ Accept: application/json
 
 {
   "username": "demo-user",
-  "password": "user_demo_password_123"
+  "password": "<DEMO_USER_PASSWORD from .env>"
 }
 
 ### Capture user access token
