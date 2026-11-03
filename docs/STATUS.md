@@ -1499,3 +1499,22 @@ Phase 6 overall: `VERIFIED`, gate closed, with the open items above.
   `guidebooks/19-connection-pooling.md`.
   Limits: only the warehouse pool is bounded; no statement timeout; no `max_connections`
   experiment; the CPU result depends on the machine; CI has not run on this branch.
+- 2026-11-03: unit 7.6 (N+1 queries) `VERIFIED`. No new dependency. The N+1 was in existing code:
+  `GET /api/v1/products` (`ProductRepository.searchAll`) returned a page of `Product` with
+  lazy `category` and `unit`, and `ProductResponse.from` read both for every product.
+  `ProductListQueryCountTest` (Hibernate statistics, `generate_statistics=true`, 30 products
+  that each have their own category and unit so the persistence context cannot share them)
+  failed first against the unchanged query: 62 statements for a page of 30 (1 page + 1 count +
+  30 category + 30 unit) and 12 for a page of 5. Fix: `@EntityGraph(attributePaths =
+  {"category", "unit"})` on `searchAll`, JPQL unchanged. After: 2 statements for a page of 5
+  and for a page of 30. Counts of statements, not durations.
+  Mistake caught by the suite: the new test inserted 30 categories and 30 units into the shared
+  singleton database and broke `CatalogRepositoryTest.seedDataIsVisibleThroughJpa` (categories
+  and units are asserted to be exactly 2); the assertion was kept and the new test now deletes
+  what it created. catalog-service `clean verify`: 63 tests, 0 failures.
+  Live smoke test only (no lab): after rebuilding the catalog container, the list through the
+  gateway returned the 3 products with category and unit codes, and a filtered list
+  (`categoryId=1&active=true&search=spk`) returned SPK-X1.
+  Guidebook `guidebooks/20-n-plus-one.md`. Limits: `GET /products/{id}` still costs 3 statements
+  for one product (fixed, not N+1, hidden by the cache on a hit); no timing claim; no compose
+  lab for this unit; CI has not run on this branch.

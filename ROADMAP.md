@@ -462,7 +462,7 @@ uses multiple app instances and shared Redis.
 
 ### Phase 7 --- Database engineering labs
 
-Status: `IN PROGRESS` - units 7.1 (race condition and lost update), 7.2 (optimistic and pessimistic locking, `guidebooks/16-optimistic-and-pessimistic-locking.md`), 7.3 (deadlock, `guidebooks/17-deadlock.md`), 7.4 (transactions and isolation levels, `guidebooks/18-isolation-levels.md`) and 7.5 (connection pooling, `guidebooks/19-connection-pooling.md`) `VERIFIED` 2026-11-03; 7.1: `stock_levels` in the warehouse, atomic conditional UPDATE, lab-only unsafe endpoint, `StockRaceConditionTest`, `labs/database/race-lab.sh`, `guidebooks/15-race-condition.md`, evidence in `docs/STATUS.md` (Phase 7 progress log). Not started: N+1, indexes and EXPLAIN ANALYZE, constraints, zero-downtime migrations, read replicas, sharding and partitioning.
+Status: `IN PROGRESS` - units 7.1 (race condition and lost update), 7.2 (optimistic and pessimistic locking, `guidebooks/16-optimistic-and-pessimistic-locking.md`), 7.3 (deadlock, `guidebooks/17-deadlock.md`), 7.4 (transactions and isolation levels, `guidebooks/18-isolation-levels.md`), 7.5 (connection pooling, `guidebooks/19-connection-pooling.md`) and 7.6 (N+1 queries, `guidebooks/20-n-plus-one.md`) `VERIFIED` 2026-11-03; 7.1: `stock_levels` in the warehouse, atomic conditional UPDATE, lab-only unsafe endpoint, `StockRaceConditionTest`, `labs/database/race-lab.sh`, `guidebooks/15-race-condition.md`, evidence in `docs/STATUS.md` (Phase 7 progress log). Not started: indexes and EXPLAIN ANALYZE, constraints, zero-downtime migrations, read replicas, sharding and partitioning.
 
 **Topics** - Race conditions, deadlocks, transactions, ACID, isolation
 levels. - Optimistic and pessimistic locking. - Connection pooling. -
