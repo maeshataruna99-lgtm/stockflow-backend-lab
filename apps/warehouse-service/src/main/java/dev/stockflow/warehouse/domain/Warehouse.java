@@ -32,7 +32,8 @@ public class Warehouse {
     @Column(nullable = false, length = 160)
     private String name;
 
-    @Column
+    // column renamed from address by migrations V5 and V6 (expand and contract, guidebook 23); the API field is still "address"
+    @Column(name = "street_address")
     private String address;
 
     @Column(nullable = false)
