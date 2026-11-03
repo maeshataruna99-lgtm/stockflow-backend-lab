@@ -2,11 +2,15 @@ package dev.stockflow.warehouse.api;
 
 import dev.stockflow.warehouse.api.dto.StockLevelRequest;
 import dev.stockflow.warehouse.api.dto.StockLevelResponse;
+import dev.stockflow.warehouse.api.dto.StockTransferResponse;
 import dev.stockflow.warehouse.domain.StockLevel;
 import dev.stockflow.warehouse.domain.StorageLocation;
 import dev.stockflow.warehouse.repository.StockLevelRepository;
 import dev.stockflow.warehouse.repository.StorageLocationRepository;
 import io.micrometer.core.instrument.MeterRegistry;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -119,8 +123,7 @@ public class StockService {
      */
     @Transactional
     public StockLevelResponse withdrawPessimistic(Long id, int quantity) {
-        jdbcTemplate.queryForObject("SELECT set_config('lock_timeout', ?, true)", String.class,
-                properties.lockTimeout().toMillis() + "ms");
+        limitLockWait();
         StockLevel stock = stockLevelRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> ResourceNotFoundException.of("stock", id));
         if (stock.getQuantity() < quantity) {
@@ -129,5 +132,53 @@ public class StockService {
         }
         stock.setQuantity(stock.getQuantity() - quantity);
         return StockLevelResponse.from(stockLevelRepository.saveAndFlush(stock));
+    }
+
+    /**
+     * Moves units between two rows. Both rows are locked in one statement in ascending id order, whatever the
+     * direction of the transfer, so two opposite transfers queue up instead of deadlocking.
+     */
+    @Transactional
+    public StockTransferResponse transfer(Long fromId, Long toId, int quantity) {
+        limitLockWait();
+        Map<Long, StockLevel> rows = new HashMap<>();
+        stockLevelRepository.findAllByIdInForUpdate(List.of(fromId, toId)).forEach(s -> rows.put(s.getId(), s));
+        return move(fromId, rows.get(fromId), toId, rows.get(toId), quantity);
+    }
+
+    /**
+     * Lab only (deadlock lab, behind stockflow.lab.unsafe-stock): locks "from" first and "to" second, with a pause
+     * in between that makes the overlap certain. Two opposite transfers each hold one lock and wait for the other.
+     * PostgreSQL detects it after deadlock_timeout, rolls one transaction back (SQLSTATE 40P01) and the other commits.
+     */
+    @Transactional
+    public StockTransferResponse transferUnordered(Long fromId, Long toId, int quantity, long pauseMillis) {
+        limitLockWait();
+        StockLevel from = stockLevelRepository.findByIdForUpdate(fromId).orElse(null);
+        if (pauseMillis > 0) {
+            jdbcTemplate.queryForObject("SELECT pg_sleep(?)::text", String.class, pauseMillis / 1000.0);
+        }
+        StockLevel to = stockLevelRepository.findByIdForUpdate(toId).orElse(null);
+        return move(fromId, from, toId, to, quantity);
+    }
+
+    /** Both rows are locked here; a null row does not exist (404). */
+    private StockTransferResponse move(Long fromId, StockLevel from, Long toId, StockLevel to, int quantity) {
+        if (from == null || to == null) {
+            throw ResourceNotFoundException.of("stock", from == null ? fromId : toId);
+        }
+        if (from.getQuantity() < quantity) {
+            throw new InsufficientStockException("stock " + from.getId() + " has " + from.getQuantity()
+                    + " units, " + quantity + " requested");
+        }
+        stockLevelRepository.addQuantity(from.getId(), -quantity);
+        stockLevelRepository.addQuantity(to.getId(), quantity);
+        return new StockTransferResponse(get(from.getId()), get(to.getId()));
+    }
+
+    /** Bounds how long this transaction waits for a row lock (PostgreSQL setting, local to the transaction). */
+    private void limitLockWait() {
+        jdbcTemplate.queryForObject("SELECT set_config('lock_timeout', ?, true)", String.class,
+                properties.lockTimeout().toMillis() + "ms");
     }
 }

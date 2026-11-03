@@ -1,6 +1,8 @@
 package dev.stockflow.warehouse.api;
 
 import dev.stockflow.warehouse.api.dto.StockLevelResponse;
+import dev.stockflow.warehouse.api.dto.StockTransferRequest;
+import dev.stockflow.warehouse.api.dto.StockTransferResponse;
 import dev.stockflow.warehouse.api.dto.StockWithdrawRequest;
 import io.swagger.v3.oas.annotations.Hidden;
 import jakarta.validation.Valid;
@@ -9,6 +11,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -36,6 +39,12 @@ public class StockLabController {
     @PostMapping("/{id}/withdraw-optimistic")
     StockLevelResponse withdrawOptimistic(@PathVariable Long id, @Valid @RequestBody StockWithdrawRequest request) {
         return stockService.withdrawOptimistic(id, request.quantity());
+    }
+
+    @PostMapping("/transfer-unordered")
+    StockTransferResponse transferUnordered(@Valid @RequestBody StockTransferRequest request,
+                                            @RequestParam(defaultValue = "0") long pauseMillis) {
+        return stockService.transferUnordered(request.fromId(), request.toId(), request.quantity(), pauseMillis);
     }
 
     @PostMapping("/{id}/withdraw-pessimistic")

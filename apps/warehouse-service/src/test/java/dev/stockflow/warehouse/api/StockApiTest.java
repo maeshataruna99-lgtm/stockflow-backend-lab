@@ -83,6 +83,41 @@ class StockApiTest extends AbstractWarehouseIntegrationTest {
                 .andExpect(status().isConflict());
     }
 
+    private static String transferBody(long from, long to, int quantity) {
+        return "{\"fromId\":" + from + ",\"toId\":" + to + ",\"quantity\":" + quantity + "}";
+    }
+
+    @Test
+    @DisplayName("A transfer moves units from one row to the other")
+    void transferMovesUnits() throws Exception {
+        long from = createStock(10);
+        long to = createStock(2);
+
+        mockMvc.perform(post("/api/v1/stock/transfer")
+                        .contentType(MediaType.APPLICATION_JSON).content(transferBody(from, to, 4)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.from.quantity").value(6))
+                .andExpect(jsonPath("$.to.quantity").value(6));
+    }
+
+    @Test
+    @DisplayName("A transfer of more than the source holds is a 409, a missing row a 404, the same row twice a 400")
+    void transferContract() throws Exception {
+        long from = createStock(3);
+        long to = createStock(0);
+
+        mockMvc.perform(post("/api/v1/stock/transfer")
+                        .contentType(MediaType.APPLICATION_JSON).content(transferBody(from, to, 4)))
+                .andExpect(status().isConflict());
+        mockMvc.perform(post("/api/v1/stock/transfer")
+                        .contentType(MediaType.APPLICATION_JSON).content(transferBody(from, 987654, 1)))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/api/v1/stock/transfer")
+                        .contentType(MediaType.APPLICATION_JSON).content(transferBody(from, from, 1)))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/stock/" + from)).andExpect(jsonPath("$.quantity").value(3));
+    }
+
     @Test
     @DisplayName("The unsafe lab endpoint does not exist unless the lab property is set")
     void unsafeEndpointIsOffByDefault() throws Exception {

@@ -2,6 +2,8 @@ package dev.stockflow.warehouse.api;
 
 import dev.stockflow.warehouse.api.dto.StockLevelRequest;
 import dev.stockflow.warehouse.api.dto.StockLevelResponse;
+import dev.stockflow.warehouse.api.dto.StockTransferRequest;
+import dev.stockflow.warehouse.api.dto.StockTransferResponse;
 import dev.stockflow.warehouse.api.dto.StockWithdrawRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -51,6 +53,19 @@ public class StockController {
     @GetMapping("/{id}")
     StockLevelResponse get(@PathVariable Long id) {
         return stockService.get(id);
+    }
+
+    @Operation(summary = "Transfer units between two stock rows",
+            description = "Locks both rows in ascending id order, so opposite transfers cannot deadlock.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Both stock rows after the transfer"),
+            @ApiResponse(responseCode = "400", description = "Quantity below 1 or the same row twice (application/problem+json)"),
+            @ApiResponse(responseCode = "404", description = "A stock row does not exist (application/problem+json)"),
+            @ApiResponse(responseCode = "409", description = "Not enough stock in the source row (application/problem+json)")
+    })
+    @PostMapping("/transfer")
+    StockTransferResponse transfer(@Valid @RequestBody StockTransferRequest request) {
+        return stockService.transfer(request.fromId(), request.toId(), request.quantity());
     }
 
     @Operation(summary = "Withdraw units from a stock row",

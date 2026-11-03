@@ -1,6 +1,8 @@
 package dev.stockflow.warehouse.api;
 
 import jakarta.validation.ConstraintViolationException;
+import java.sql.SQLException;
+import org.springframework.core.NestedExceptionUtils;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
@@ -53,6 +55,13 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(PessimisticLockingFailureException.class)
     ProblemDetail handleLockTimeout(PessimisticLockingFailureException ex) {
+        Throwable root = NestedExceptionUtils.getMostSpecificCause(ex);
+        if (root instanceof SQLException sql && "40P01".equals(sql.getSQLState())) {
+            ProblemDetail deadlock = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                    "The database rolled this request back to resolve a deadlock; nothing changed, retry it");
+            deadlock.setTitle("Deadlock");
+            return deadlock;
+        }
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
                 "The row is locked by another request; retry shortly");
         problem.setTitle("Row locked");
