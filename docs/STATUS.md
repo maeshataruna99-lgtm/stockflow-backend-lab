@@ -41,7 +41,7 @@ documentation with an opt-in hostdev override (unit 4.3); gate review
 below. Phase 5 - API gateway and its ten use cases: `IN PROGRESS` - units 5.1
 (Dynamic Routing), 5.2 (JWT Authentication & Role Authorization) and 5.3
 (Redis-backed rate limiting) `VERIFIED` (evidence below; 5.3 against real
-Redis on 2026-11-03); unit 5.4 (circuit breaker) `VERIFIED` 2026-11-03; unit 5.5 (load balancing) is next.
+Redis on 2026-11-03); unit 5.4 (circuit breaker) `VERIFIED` 2026-11-03; 5.5 (load balancing) `VERIFIED` 2026-11-03; unit 5.6 (timeout and retry) is next.
 Phase 0 evidence below remains the gate.
 
 ## Last verified commit
@@ -890,3 +890,23 @@ configuration question.
   directly without a token and returns the same constant 503; the live POST was
   rejected by an already-open circuit, so the "downstream 500 on a write" case
   is covered by the unit test only.
+
+- 2026-11-03: unit 5.5 (discovery-based load balancing with two instances)
+  `VERIFIED`. No gateway code change: the `lb://CATALOG-SERVICE` routes
+  already balance round robin. Added `LoadBalancingGatewayTest` (two
+  WireMock instances behind the simple discovery client; 10 requests give
+  exactly 5 and 5) and the opt-in `compose.labs.yaml` (second catalog
+  instance `catalog-2`, metrics endpoint exposed on both catalog instances,
+  internal only). `mvnw.cmd --batch-mode test -Dtest=LoadBalancingGatewayTest`:
+  1 test, 0 failures. Live on the compose stack with
+  `-f compose.yaml -f compose.labs.yaml`: Eureka listed two UP
+  CATALOG-SERVICE instances (plus one stale DOWN entry left from the earlier
+  catalog restart). 20 requests through the gateway, counted per instance via
+  `http.server.requests` for `/api/v1/products`: catalog +10, catalog-2 +10.
+  Failure path: after `stop catalog-2`, 12 requests sent at once gave 5x 200
+  and 7x 503 (the gateway still used its cached instance list; the circuit
+  breaker answered 503); 45 s later 12 of 12 were 200. Single run, local
+  machine. Full gateway suite: `clean verify` 32 tests, 0 failures. Limits: no failover to the surviving instance (that is use case 6);
+  circuit state and the instance cache are per gateway instance.
+  The lab instance was removed afterwards and the core stack restored
+  (6 containers healthy).

@@ -413,7 +413,7 @@ CI runs 40674415027 and 40674854953 all green).
 
 ### Phase 5 --- API Gateway and ten gateway use cases
 
-Status: `IN PROGRESS` (Units 5.1-5.3 `VERIFIED` on 2026-10-29, 5.4 on 2026-11-03; evidence in
+Status: `IN PROGRESS` (Units 5.1-5.3 `VERIFIED` on 2026-10-29, 5.4 and 5.5 on 2026-11-03; evidence in
 `docs/STATUS.md`).
 
 Implement and test these individually:
@@ -422,7 +422,7 @@ Implement and test these individually:
 2.  [x] **JWT authentication and role authorization** (`VERIFIED` 2026-10-29: ADR 0006, `JwtAuthenticationFilter`, `JwtService`, `DemoAuthController` with ADR 0003 BCrypt isolation, 10/10 security tests green including prod-isolation, `guidebooks/02-jwt-authentication-authorization.md`, `playground/http/gateway-jwt-auth.http`).
 3.  [x] **Redis-backed rate limiting** (`VERIFIED` 2026-10-29, real-Redis burst check 2026-11-03: `RateLimitProperties`, `UserOrIpKeyResolver` anti-spoofing resolver, `RateLimiterConfig` with reactive Redis RateLimiter, status 429 response, in-memory controllable test rate limiter, 6/6 unit/integration tests green, `guidebooks/03-redis-rate-limiting.md`, `playground/http/gateway-rate-limiting.http`).
 4.  [x] **Circuit breaker and controlled fallback** (`VERIFIED` 2026-11-03: Resilience4j per-route breakers, `FallbackController` 503 problem+json, no retry on writes, 31/31 gateway tests, live stop/start of catalog, `guidebooks/04-circuit-breaker-fallback.md`, `playground/http/gateway-circuit-breaker.http`).
-5.  [ ] Discovery-based load balancing with two service instances.
+5.  [x] **Discovery-based load balancing with two service instances** (`VERIFIED` 2026-11-03: `LoadBalancingGatewayTest` 5/5 split, `compose.labs.yaml`, live 10/10 split across two catalog containers, failure path observed, `guidebooks/05-discovery-load-balancing.md`, `playground/http/gateway-load-balancing.http`).
 6.  [ ] Timeout and bounded retry for safe/idempotent operations.
 7.  [ ] Request/response transformation and trace/request ID.
 8.  [ ] Distributed tracing and correlation ID.
