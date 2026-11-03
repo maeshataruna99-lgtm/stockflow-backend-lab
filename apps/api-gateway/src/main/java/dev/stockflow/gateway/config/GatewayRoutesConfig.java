@@ -9,6 +9,7 @@ import org.springframework.cloud.gateway.route.builder.GatewayFilterSpec;
 import org.springframework.cloud.gateway.route.builder.RouteLocatorBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 
 @Configuration
@@ -16,13 +17,16 @@ public class GatewayRoutesConfig {
 
     private final RateLimiter<?> rateLimiter;
     private final KeyResolver keyResolver;
+    private final RetryProperties retry;
 
     public GatewayRoutesConfig(
             RateLimiter<?> rateLimiter,
-            @Qualifier("userOrIpKeyResolver") KeyResolver keyResolver
+            @Qualifier("userOrIpKeyResolver") KeyResolver keyResolver,
+            RetryProperties retry
     ) {
         this.rateLimiter = rateLimiter;
         this.keyResolver = keyResolver;
+        this.retry = retry;
     }
 
     @Bean
@@ -43,7 +47,10 @@ public class GatewayRoutesConfig {
                 .build();
     }
 
-    /** Rate limit first, then a per-route circuit breaker; 5xx and timeouts end in the 503 fallback. */
+    /**
+     * Rate limit, then a per-route circuit breaker (5xx and timeouts end in the 503 fallback), then retry
+     * inside the breaker so the breaker counts the final outcome. Only GET is retried: it is safe to repeat.
+     */
     private GatewayFilterSpec protect(GatewayFilterSpec f, String breakerName) {
         return f.requestRateLimiter(c -> c
                         .setRateLimiter(rateLimiter)
@@ -52,6 +59,12 @@ public class GatewayRoutesConfig {
                 .circuitBreaker(c -> c
                         .setName(breakerName)
                         .setFallbackUri("forward:/fallback")
-                        .setStatusCodes(Set.of("500", "502", "503", "504")));
+                        .setStatusCodes(Set.of("500", "502", "503", "504")))
+                .retry(c -> c
+                        .setRetries(retry.getRetries())
+                        .setMethods(HttpMethod.GET)
+                        .setSeries()
+                        .setStatuses(HttpStatus.BAD_GATEWAY, HttpStatus.SERVICE_UNAVAILABLE, HttpStatus.GATEWAY_TIMEOUT)
+                        .setBackoff(retry.getFirstBackoff(), retry.getMaxBackoff(), 2, false));
     }
 }

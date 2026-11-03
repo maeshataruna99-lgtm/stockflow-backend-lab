@@ -30,3 +30,9 @@ management:
     web:
       exposure:
         include: health,info
+
+# every outbound call has a connect and a response timeout; the circuit breaker timeout must stay above
+# retries x response-timeout (see stockflow.gateway.circuit-breaker.timeout)
+spring.cloud.gateway.server.webflux.httpclient:
+  connect-timeout: 2000
+  response-timeout: 1s

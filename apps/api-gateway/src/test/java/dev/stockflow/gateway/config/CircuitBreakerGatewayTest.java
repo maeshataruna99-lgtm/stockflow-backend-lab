@@ -29,7 +29,7 @@ import org.springframework.test.web.reactive.server.WebTestClient;
                 "stockflow.gateway.circuit-breaker.sliding-window-size=2",
                 "stockflow.gateway.circuit-breaker.minimum-number-of-calls=2",
                 "stockflow.gateway.circuit-breaker.wait-duration-in-open-state=30s",
-                "stockflow.gateway.circuit-breaker.timeout=300ms"
+                "stockflow.gateway.circuit-breaker.timeout=1s"
         })
 @AutoConfigureWebTestClient
 @AutoConfigureWireMock(port = 0)
@@ -66,7 +66,7 @@ class CircuitBreakerGatewayTest {
         stubFor(get(urlEqualTo("/api/v1/categories")).willReturn(aResponse()
                 .withHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
                 .withBody("[]")
-                .withFixedDelay(1500)));
+                .withFixedDelay(3000)));
 
         webTestClient.get().uri("/api/v1/categories")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)

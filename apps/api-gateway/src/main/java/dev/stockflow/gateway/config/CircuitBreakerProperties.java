@@ -20,8 +20,8 @@ public class CircuitBreakerProperties {
     /** How long the circuit stays open before probing the downstream again. */
     private Duration waitDurationInOpenState = Duration.ofSeconds(10);
 
-    /** Per-call timeout; a slower downstream counts as a failure. */
-    private Duration timeout = Duration.ofSeconds(2);
+    /** Whole-call timeout, retries included; a slower downstream counts as a failure. */
+    private Duration timeout = Duration.ofSeconds(5);
 
     public int getSlidingWindowSize() {
         return slidingWindowSize;
