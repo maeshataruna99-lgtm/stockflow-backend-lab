@@ -1549,3 +1549,31 @@ Phase 6 overall: `VERIFIED`, gate closed, with the open items above.
   overhead and build time not measured; nothing on `unit_id`; search terms shorter than 3
   characters not measured; one dataset shape; plain `CREATE INDEX` (no `CONCURRENTLY`, unit 7.9);
   no compose-scale dataset (the live database holds 3 products); CI has not run on this branch.
+- 2026-11-03: unit 7.8 (foreign key and unique constraints) `VERIFIED`. No new dependency, no
+  new migration (the constraints already exist). The gap found: the
+  `DataIntegrityViolationException` handler of warehouse-service and catalog-service told every
+  violation "The request violates a unique constraint" (title "Duplicate resource"), also
+  foreign key and check violations. Test first: `ConstraintTest.foreignKeyViolationIsNotReportedAsAUniqueViolation`
+  failed with `expected: "Reference conflict" but was: "Duplicate resource"`. Fix: read the SQLSTATE
+  of the root cause; 23505 stays Duplicate resource, 23503 is Reference conflict, any other is a
+  generic Constraint violation, all 409; same change and `ConstraintErrorMappingTest` (2 tests)
+  in catalog-service.
+  `ConstraintTest` (6 tests incl. the inherited context test) on the real container: 12
+  simultaneous creates of one warehouse code gave 1 x 201 and 11 x 409, one row; 9 of the 11
+  refusals came from the unique constraint after the `existsByCode` pre-check had passed, 2 from
+  the pre-check. Eight threads that check then insert on a table without a constraint inserted 8
+  rows for one sku, with `UNIQUE` 1 inserted and 7 refused with 23505. Deleting a location that
+  has stock gave 23503. A delete of a location while an insert of its stock row was uncommitted
+  stayed blocked (still running after 500 ms, 1 backend waiting on a lock in `pg_stat_activity`)
+  and failed with 23503 after the commit. warehouse-service `clean verify`: 77 tests, catalog-service:
+  70 tests, 0 failures.
+  Live on the lab stack (`labs/database/constraint-lab.sh`, 20 simultaneous creates of one
+  code straight at the warehouse): 1 x 201, 19 x 409, 0 other, 1 row, in each of 3 runs. The lab
+  leaves 3 `LAB-<timestamp>` warehouses in the compose database (demo data, like the earlier lab
+  rows). Guidebook `guidebooks/22-foreign-key-and-unique-constraints.md`.
+  Mistake caught by a hook: a zero-width space (U+200B) had slipped into a test method name;
+  removed, and a scan of the sources for zero-width characters found none.
+  Limits: 409 for every constraint violation (a check or not-null violation arguably means a
+  validation gap and could be a 400 or 500); the foreign key race is shown with SQL, not through
+  the HTTP API; `ON DELETE CASCADE` and deferred constraints not explored; CI has not run on
+  this branch.
