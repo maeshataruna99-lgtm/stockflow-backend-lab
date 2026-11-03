@@ -29,3 +29,9 @@ management.tracing.sampling.probability: 1.0
 
 # puts the trace id into reactive log lines (MDC) on the gateway
 spring.reactor.context-propagation: auto
+
+# The rate limiter talks to Redis on every request. Without a timeout Lettuce waits 60 s per command, so a Redis
+# outage froze every request for a minute. With these, the limiter gives up fast and lets the request through
+# (RedisRateLimiter fails open): an outage costs the rate limit, not availability.
+spring.data.redis.timeout: 300ms
+spring.data.redis.connect-timeout: 300ms

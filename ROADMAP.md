@@ -447,6 +447,8 @@ observed distribution.
 
 ### Phase 6 --- Redis and caching labs
 
+Status: `VERIFIED` 2026-11-03 - units 6.1 to 6.4 and the gate review in `docs/STATUS.md` (Phase 6 gate review), CI run 41628003809 on PR 4 (4 of 4 jobs passing). Guidebooks `11-product-cache-aside.md`, `12-redis-eviction.md`, `13-cache-stampede.md` and `14-distributed-caching.md`. Open items: core Redis memory cap, per-instance single-flight, gateway startup readiness.
+
 **Topics** - Cache invalidation. - Redis eviction. - Cache stampede. -
 Distributed caching across service instances.
 

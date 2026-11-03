@@ -48,8 +48,13 @@ Key documents:
   tracing in logs, one error contract, API versioning; 58 gateway tests, CI run
   41580832608 green). Catalog and warehouse verify the JWT themselves
   (ADR 0007). Known limits are in [docs/STATUS.md](docs/STATUS.md).
-- Phases 6-10: NOT STARTED. Caching, database, resilience, messaging and
-  observability labs follow the ROADMAP order.
+- Phase 6 - Redis and caching labs: VERIFIED on 2026-11-03 (gate closed; product
+  cache-aside with invalidation after commit and Redis failure handling, eviction
+  policy lab, stampede lab with single-flight, two catalog instances on one
+  Redis; 60 catalog tests, CI run 41628003809 green). Open items are in
+  [docs/STATUS.md](docs/STATUS.md).
+- Phases 7-10: NOT STARTED. Database, resilience, messaging and observability
+  labs follow the ROADMAP order.
 
 ## Prerequisites
 

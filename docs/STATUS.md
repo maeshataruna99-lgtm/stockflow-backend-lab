@@ -1190,3 +1190,187 @@ Open items from the gate review above, now:
 Phase 5 overall: `VERIFIED`, gate closed, with open item 3 and the carried notes
 recorded as honest limits, not gate failures. Next: Phase 6 (Redis and caching
 labs).
+
+## Phase 6 progress log
+
+- 2026-11-03: unit 6.1 (cache-aside, invalidation after commit, Redis
+  failure) `VERIFIED`. Added `spring-boot-starter-data-redis` to
+  catalog-service (version from the Spring Boot BOM, approved by the user).
+  `ProductCache` (package `cache`): `getOrLoad` for `GET /api/v1/products/{id}`
+  with key `catalog:product:v1:<id>`, JSON value, TTL `stockflow.cache.product-ttl`
+  (60 s), counter `catalog.cache{cache=product,result=hit|miss|error}`;
+  `evictAfterCommit` registered by `ProductService.update` as a transaction
+  synchronization; 404 never cached; Redis errors counted and logged, the
+  request served from the database, and no write-back after a failed read.
+  Settings: `spring.data.redis.timeout` and `connect-timeout` 300 ms,
+  `management.health.redis.enabled: false`, `stockflow.cache.enabled`.
+  Tests first (they failed before the code): `ProductCacheTest` against real
+  `redis:7.4.12-alpine` and PostgreSQL containers (miss then hit with TTL <= 30 s,
+  PATCH evicts and the next read is fresh, a rolled-back update keeps the
+  entry, 404 not cached), `ProductCacheRedisDownTest` (Redis port closed: GET
+  200 from the database with exactly one error counted, PATCH 200),
+  `RedisTimeoutConfigTest` (timeouts and health setting present in the main
+  yml, read from the file because `src/test/resources/application.yml`
+  shadows it). `CatalogSecurityTest` gained a metrics test (admin only) and the
+  test profile mirrors the health setting. catalog-service `clean verify`: 43
+  tests, 0 failures. Gateway `clean verify`: 59 tests, 0 failures.
+  Live on the lab stack (rebuilt catalog and gateway, calls through the
+  gateway, counters read from the catalog metrics endpoint with an admin
+  token): after deleting the key, three reads gave miss +1 and hit +2 (109,
+  70 and 74 ms); `redis-cli TTL` showed 58; the stored value was the product
+  JSON; PATCH returned 200 and the key was gone (`EXISTS` 0), the next GET
+  returned the edited description and recreated the key.
+  Defect found by the outage run, in the gateway (unit 5.3, never tested
+  against a Redis outage): with Redis stopped every request through the
+  gateway took 60.5-61.0 s (4 requests measured: 60967, 60733, 60690 and 60499
+  ms) before the rate limiter failed open and returned 200, because the
+  gateway had no Redis timeout (Lettuce default 60 s). Fix:
+  `spring.data.redis.timeout` and `connect-timeout` 300 ms in the gateway
+  `application.yml`, guarded by `RedisTimeoutConfigTest` (failed before). After the
+  fix, with Redis stopped: GET 723, 737 and 758 ms, PATCH 938 ms, catalog health
+  still UP, and 62, 76 and 59 ms right after Redis was started again. The 0.7 s
+  is the gateway timeout plus the catalog read timeout (300 ms each) plus the
+  database read. Redis outage also means the rate limit is not enforced
+  (fail open); guidebook 03 now says so.
+  Observation: the very first GET after a catalog restart took 1.77-1.79 s
+  (cold start), longer than the gateway response timeout of 1 s, so the
+  gateway retried it and the catalog counted two misses for one client
+  request (miss +2, hit +2 over three reads). This is a small natural
+  stampede and is the starting point of unit 6.3.
+  Other changes: the admin metrics rule (`/actuator/metrics/**` needs ROLE_ADMIN
+  in catalog; the lab override exposes the endpoint), `SPRING_DATA_REDIS_HOST: redis`
+  for `catalog` and `catalog-2`, guidebook 05 commands now carry an admin
+  token (they broke when catalog started verifying tokens, ADR 0007), guidebook
+  11 and `playground/http/product-cache.http`.
+  Side effects on the compose catalogdb: product 1 `updated_at` advanced and its
+  description was edited and restored to the original text.
+  Limits: only the product by id is cached (lists and searches are not);
+  the reader/writer race can leave a stale copy for up to the TTL; one
+  single run on this machine; 6.2-6.4 not started.
+
+- 2026-11-03: unit 6.2 (Redis eviction lab) `VERIFIED`. No new dependency.
+  Controlled configuration: service `redis-lab` in `compose.labs.yaml`
+  (profile `eviction`, `redis:7.4.12-alpine`, `--maxmemory` from
+  `LAB_REDIS_MAXMEMORY`, `--maxmemory-policy` from `LAB_REDIS_POLICY`,
+  `--maxmemory-samples 10`), separate from the core Redis that also holds the
+  gateway rate-limit keys. Experiment script `labs/caching/eviction-lab.sh`.
+  Automated: `RedisEvictionPolicyTest` (5 tests, 2 MB cap, 3000 cold keys of 1 KB,
+  50 hot keys: allkeys-lru keeps >= 45 hot keys with no OOM, allkeys-random keeps
+  < 30, noeviction gives OOM and 0 evictions, volatile-lru without TTL gives OOM,
+  volatile-lru with TTL evicts) and `ProductCacheFullRedisTest` (Redis at
+  `noeviction` and full: product reads return 200 with the right body, exactly one
+  error counted, and after freeing keys the next reads miss then hit). catalog-service
+  `clean verify`: 50 tests, 0 failures, run twice (the probabilistic eviction tests
+  were stable in both). Assertion detail fixed on the way: Spring wraps the Redis
+  error as "Error in execution", the OOM text is in the root cause.
+  Measured (script, 8 MB cap, 12000 cold keys, one run per row):
+  noeviction 6603 writes refused, 50/50 hot left, 0 evicted; allkeys-lru 0 refused,
+  50/50 hot, 6699 evicted; allkeys-random 0 refused, 8/50 hot, 10785 evicted;
+  volatile-lru without TTL 11951 refused, 0 evicted; volatile-lru with TTL 3600 s 321
+  refused, 49/50 hot, 6573 evicted.
+  Lab defect found and fixed: the first script wrote everything in about a second;
+  Redis ages keys in whole seconds, so LRU could not tell hot from cold and
+  volatile-lru with TTL left 0 of 50 hot keys (the slower automated test kept them).
+  The script now writes in batches one second apart.
+  Finding for the project, not changed here: the core Redis has no `maxmemory`
+  (`CONFIG GET maxmemory-policy` shows noeviction), so its memory is unbounded, and
+  it is shared with the gateway rate limiter; capping it needs a decision.
+  Limits: single run per policy on one machine; allkeys-lfu and volatile-ttl not
+  run; replication behavior not exercised; the lab Redis container was removed
+  afterwards and the core stack was unchanged.
+
+- 2026-11-03: unit 6.3 (cache stampede lab, single-flight) `VERIFIED`. No new
+  dependency. `ProductCache.getOrLoad` now coalesces simultaneous misses per
+  product id inside one catalog instance: the first request is the leader (it
+  looks in Redis once more, then loads from the database and stores), the others
+  wait on its `CompletableFuture`; a leader failure such as 404 is the answer
+  for every waiter. Switch `stockflow.cache.single-flight` (default true); lab
+  override `LAB_SINGLE_FLIGHT` in `compose.labs.yaml`. New results of the counter
+  `catalog.cache`: `load` (database read) and `coalesced`.
+  Tests first: `ProductCacheStampedeTest` (3 tests incl. 20 concurrent 404s) and
+  `ProductCacheStampedeUnprotectedTest` (single-flight off) against real Redis
+  and PostgreSQL containers, 40 threads released together via `ConcurrentGets`.
+  Measured: single-flight on = 1 database load for 40 requests; single-flight off
+  = 40 loads (the unprotected test prints the number; an earlier run printed 10,
+  see below). Live on the lab stack (`labs/caching/stampede-lab.sh`, 40 wget
+  requests straight at the catalog from the gateway container, product 1 key
+  deleted before each round): single-flight on, warm-up round 1 load (39
+  coalesced) and three rounds of 1, 1, 1 load (coalesced 14, 22, 4); single-flight
+  off, warm-up round straight after the restart 40 loads, then 7, 6, 5 loads. All
+  requests returned 200 in every round. One run per row, one machine, not a
+  benchmark.
+  Defect found by the lab, in unit 6.1: the first unprotected test run showed 10
+  loads, not 40, because `ProductService.get` was `@Transactional`, so every
+  request took one of the 10 pooled connections before it even checked the
+  cache. A new test (`hitDoesNotUseTheDatabase`, counting `hikaricp.connections.acquire`
+  around a hit) failed, which proved that a cache HIT also took a connection. Fix:
+  `get` is no longer transactional as a whole; only the load runs in a read-only
+  `TransactionTemplate`. After the fix the test passes and the unprotected herd is
+  the full 40.
+  catalog-service `clean verify`: 56 tests, 0 failures (one run after the last
+  code change; the stampede and eviction tests also passed in the runs before the transaction change).
+  Limits: single-flight is per instance, so a herd across N instances costs up to
+  N loads (unit 6.4); no distributed lock, no TTL jitter, no stale-while-revalidate;
+ 
+  no multi-process lab beyond one machine, one run per row.
+- 2026-11-03: unit 6.4 (distributed caching) `VERIFIED`. No production code and no
+  new dependency: the shared Redis key already serves every instance. New
+  `ProductCacheTwoInstancesTest` (3 tests) starts instance B as a second
+  application context against the same PostgreSQL and Redis containers as the
+  test's own context A. A entry loaded by A is a hit on B (B load +0, hit +1); an
+  update on A removes the key and B returns the new name with one load; 40 reads
+  split 20/20 over both instances with the key missing cost 1 load on A and 1 on B.
+  A first draft of the test passed B's properties with `.properties()`, which the
+  test `application.yml` overrode (`stockflow.cache.enabled: false`), so B ran with
+  the cache off and its counters stayed 0; command-line arguments fixed it.
+  Live on the lab stack (`catalog` + `catalog-2`, `labs/caching/distributed-lab.sh`):
+  read on `catalog` = 1 load, same read on `catalog-2` = 0 loads and 1 hit; PATCH
+  through the gateway returned 200, the key was gone, both instances returned the
+  new description with 1 load in total; 40 reads split 20/20 with the key missing:
+  all 200, `catalog` +1 load and `catalog-2` +1 load. One run per row, one machine.
+  catalog-service `clean verify`: 60 tests, 0 failures.
+  Limit: single-flight stays per instance, so a herd over N instances costs up to N
+  loads; no distributed lock. Guidebook `guidebooks/14-distributed-caching.md`.
+  Phase 6 gate review and a CI run on the branch are still to do.
+
+## Phase 6 gate review (2026-11-03, closing Phase 6)
+
+CI evidence for the whole Phase 6 branch: GitHub Actions run 41628003809
+(pull_request event, PR 4) on commit `d7a1945`, matched to the PR head sha before
+use, concluded success with 4 of 4 matrix jobs passing (catalog-service 60 tests,
+api-gateway 59, warehouse-service 31, discovery-server 1; 0 failures).
+Two earlier runs of this PR failed in `RedisEvictionPolicyTest`
+(`allkeysLruKeepsTheHotKeys`, `volatileLruWithTtlEvicts`: 16 and 8, then 21 and
+17 of 50 hot keys kept, 45 expected). Cause: Redis ages keys in whole seconds and
+its own baseline uses about 1 MB of the 2 MB cap (measured 987 KB), so on a fast
+runner about 1000 cold keys shared a second with the hot reads. The tests now
+pause 1.1 s before each hot read, every 250 keys; assertions were not changed.
+The failure was not reproducible on the development machine; CI is the evidence.
+
+| Unit | Guidebook | Lab or http file | Automated tests | Live evidence |
+|---|---|---|---|---|
+| 6.1 Cache-aside, invalidation, Redis failure | 11 | product-cache.http | ProductCacheTest 6, ProductCacheRedisDownTest 2, RedisTimeoutConfigTest 2 | miss then hit, TTL, PATCH evicts, Redis stopped: 200 from the database |
+| 6.2 Eviction | 12 | labs/caching/eviction-lab.sh | RedisEvictionPolicyTest 5, ProductCacheFullRedisTest 2 | four policies on a capped Redis |
+| 6.3 Stampede | 13 | labs/caching/stampede-lab.sh | ProductCacheStampedeTest 3, ProductCacheStampedeUnprotectedTest 2 | 1,1,1 loads with single-flight, 7,6,5 without |
+| 6.4 Distributed caching | 14 | labs/caching/distributed-lab.sh | ProductCacheTwoInstancesTest 4 | two catalog containers, one Redis |
+
+Acceptance criteria:
+
+- Catalog read path shows cache miss then hit: `VERIFIED` (ProductCacheTest.missThenHit; live counters).
+- Update invalidates after the DB commit: `VERIFIED` (updateEvictsAndNextReadIsFresh; rolledBackUpdateKeepsTheEntry).
+- Database remains the source of truth: `VERIFIED` (entries are copies with a TTL, a 404 is never cached, Redis down falls back to the database).
+- Redis failure behavior explicit and tested: `VERIFIED` (ProductCacheRedisDownTest, RedisTimeoutConfigTest, ProductCacheFullRedisTest, gateway limiter fail-open).
+- Eviction lab has a controlled memory and policy configuration: `VERIFIED` (2 MB cap in tests, `redis-lab` with `LAB_REDIS_MAXMEMORY` and `LAB_REDIS_POLICY` in compose.labs.yaml).
+- Stampede lab has reproducible concurrent requests and a measured observation: `VERIFIED` (40 simultaneous requests: test 1 load against 40 without protection; live numbers in guidebook 13).
+- Distributed caching uses multiple app instances and shared Redis: `VERIFIED` (two application contexts in the test; `catalog` and `catalog-2` containers live).
+
+Open items and carried notes:
+
+1. Core Redis has no `maxmemory` and is shared by the product cache and the gateway rate limiter: open, decision pending (an eviction policy would also remove rate-limit keys).
+2. Single-flight is per instance: a herd over N instances costs up to N loads; no distributed lock, no TTL jitter, no stale-while-revalidate.
+3. Stale window around an eviction (a reader that loaded the old row just before a commit can re-store it): bounded by the 60 s TTL, no version column.
+4. Gateway startup readiness (503 on the first request about 45 s after a restart): still open, minor.
+5. Spring Boot 3.5 and Spring Cloud 2025.0 past OSS end of support; tracing has no exporter (Phase 10).
+6. Lab numbers are one run per row on one machine; they are not benchmarks.
+
+Phase 6 overall: `VERIFIED`, gate closed, with the open items above.
