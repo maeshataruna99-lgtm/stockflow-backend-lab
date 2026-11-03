@@ -41,7 +41,7 @@ documentation with an opt-in hostdev override (unit 4.3); gate review
 below. Phase 5 - API gateway and its ten use cases: `IN PROGRESS` - units 5.1
 (Dynamic Routing), 5.2 (JWT Authentication & Role Authorization) and 5.3
 (Redis-backed rate limiting) `VERIFIED` (evidence below; 5.3 against real
-Redis on 2026-11-03); unit 5.4 (circuit breaker) `VERIFIED` 2026-11-03; 5.5 (load balancing) `VERIFIED` 2026-11-03; 5.6 (timeout and retry) `VERIFIED` 2026-11-03; 5.7 (request ID) `VERIFIED` 2026-11-03; 5.8 (tracing) `VERIFIED` 2026-11-03; 5.9 (error contract) `VERIFIED` 2026-11-03; unit 5.10 (API versioning) is next.
+Redis on 2026-11-03); unit 5.4 (circuit breaker) `VERIFIED` 2026-11-03; 5.5 (load balancing) `VERIFIED` 2026-11-03; 5.6 (timeout and retry) `VERIFIED` 2026-11-03; 5.7 (request ID) `VERIFIED` 2026-11-03; 5.8 (tracing) `VERIFIED` 2026-11-03; 5.9 (error contract) `VERIFIED` 2026-11-03; 5.10 (API versioning) `VERIFIED` 2026-11-03; all ten Phase 5 units are verified, the Phase 5 gate review and the ADR 0003 root-user obligation are next.
 Phase 0 evidence below remains the gate.
 
 ## Last verified commit
@@ -1007,3 +1007,29 @@ configuration question.
   path is proven by a unit-level test of the handler, not by a live fault; the
   429 decorator wraps `setComplete()` of the limiter and needs a retest if the
   limiter filter is replaced.
+
+- 2026-11-03: unit 5.10 (API versioning and backward compatibility)
+  `VERIFIED`. Tests first: the first-draft tests failed before the
+  change (alias, deprecation, rate limit and write cases). Added `ApiVersionFilter` (web filter before routing): an
+  unversioned `/api/<x>` path is rewritten to `/api/v1/<x>` with the query
+  string kept, and the response gets `Deprecation: true` and
+  `Link: </api/v1/<x>>; rel="successor-version"`. Rewriting before routing
+  keeps the alias on the same route as v1, so it shares authentication, role
+  check, rate limit bucket and circuit breaker; a separate alias route would
+  have given a second quota. An unknown version (`/api/v9/...`) has no route
+  and returns the 404 problem body. `ApiVersioningGatewayTest`: 6 tests, 0
+  failures. Two corrections made while writing it: a draft test expected 401
+  for an unauthenticated `/api/v9/...`, but no route means no gateway filter
+  runs, so it is 404 for every caller (same as any unknown path); I had
+  widened the JWT guard from `/api/v1/` to `/api/` for it, reverted that change
+  and removed the test, so `JwtAuthenticationFilter` is untouched by this unit.
+  Live on the rebuilt gateway: `/api/v1/products?size=2` 200 with no
+  Deprecation header; `/api/products?size=2` 200 with `Deprecation: true` and
+  `Link: </api/v1/products>; rel="successor-version"`; `/api/categories` 200
+  with the matching Link; `/api/products` without a token 401 problem body;
+  `/api/v9/products` with a token 404 problem body. Single run, local machine.
+  Limits: only v1 exists, so a real v2 route and a `Sunset` date are not
+  implemented; the alias is a compatibility measure that should be monitored
+  and removed later; `/api/<unknown>` is rewritten to `/api/v1/<unknown>` and
+  fails at the downstream with its own 404.
+  Full gateway suite `clean verify`: 55 tests, 0 failures (one run).
