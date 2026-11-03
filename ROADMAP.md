@@ -413,9 +413,9 @@ CI runs 40674415027 and 40674854953 all green).
 
 ### Phase 5 --- API Gateway and ten gateway use cases
 
-Status: `IN PROGRESS` (all ten units `VERIFIED`: 5.1-5.3 on 2026-10-29, 5.4-5.10 on 2026-11-03).
-Gate review 2026-11-03 is written up in `docs/STATUS.md` and the gate is NOT closed: CI has not run on
-units 5.4-5.10 and the service-level JWT work (ADR 0007; the authorization gap from the review is closed).
+Status: `VERIFIED` (2026-11-03, gate closed; all ten units verified: 5.1-5.3 on 2026-10-29, 5.4-5.10 on 2026-11-03;
+evidence in `docs/STATUS.md`: gate review and closure sections, CI run 41580832608 green on PR 3, ADR 0007 for service-level
+JWT verification). Open minor item: gateway startup readiness.
 
 Implement and test these individually:
 

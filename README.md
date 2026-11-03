@@ -42,13 +42,12 @@ Key documents:
   2026-10-28 (gate closed; multi-stage non-root Dockerfiles, full
   six-service compose stack with internal network, Eureka registration,
   health checks, restart and volume-preservation evidence).
-- Phase 5 - API gateway and its ten use cases: IN PROGRESS. All ten units are
-  implemented and verified locally (dynamic routing, JWT authentication and
-  roles, Redis rate limiting, circuit breaker, load balancing, timeout and
-  GET-only retry, request ID, tracing in logs, one error contract, API
-  versioning; 58 gateway tests). Catalog and warehouse verify the JWT
-  themselves (ADR 0007). The gate is not closed: CI has not run on this work
-  yet (details in [docs/STATUS.md](docs/STATUS.md)).
+- Phase 5 - API gateway and its ten use cases: VERIFIED on 2026-11-03 (gate
+  closed; dynamic routing, JWT authentication and roles, Redis rate limiting,
+  circuit breaker, load balancing, timeout and GET-only retry, request ID,
+  tracing in logs, one error contract, API versioning; 58 gateway tests, CI run
+  41580832608 green). Catalog and warehouse verify the JWT themselves
+  (ADR 0007). Known limits are in [docs/STATUS.md](docs/STATUS.md).
 - Phases 6-10: NOT STARTED. Caching, database, resilience, messaging and
   observability labs follow the ROADMAP order.
 

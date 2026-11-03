@@ -1167,3 +1167,26 @@ Open items (why the gate is not closed):
   document endpoints are open inside the network; running a service on the host
   needs `STOCKFLOW_SECURITY_JWT_SECRET` set. Gate open item 2 is closed by this
   change; item 1 (CI run) and the minor startup observation remain.
+
+## Phase 5 gate closure (2026-11-03)
+
+CI evidence for the whole Phase 5 branch: GitHub Actions run 41580832608
+(pull_request event, PR 3) on commit `802148f`, matched to the PR head sha
+before use, concluded success with 4 of 4 matrix jobs passing (discovery,
+api-gateway, catalog-service, warehouse-service).
+
+Open items from the gate review above, now:
+
+1. CI run on units 5.4-5.10 and the fixes: closed by run 41580832608.
+2. Service-level authorization: closed by ADR 0007 (catalog and warehouse
+   verify the JWT; evidence in the entry above).
+3. Gateway startup readiness (503 on the first request about 45 s after a
+   restart, observed once): still open, minor, not fixed.
+4. Carried notes unchanged: Spring Boot 3.5 and Spring Cloud 2025.0 past OSS end
+   of support; tracing has no exporter (Phase 10); circuit breaker state and the
+   load balancer cache are per gateway instance; one shared HS256 secret in
+   three services.
+
+Phase 5 overall: `VERIFIED`, gate closed, with open item 3 and the carried notes
+recorded as honest limits, not gate failures. Next: Phase 6 (Redis and caching
+labs).
