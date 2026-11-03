@@ -1518,3 +1518,34 @@ Phase 6 overall: `VERIFIED`, gate closed, with the open items above.
   Guidebook `guidebooks/20-n-plus-one.md`. Limits: `GET /products/{id}` still costs 3 statements
   for one product (fixed, not N+1, hidden by the cache on a hit); no timing claim; no compose
   lab for this unit; CI has not run on this branch.
+- 2026-11-03: unit 7.7 (indexes and EXPLAIN ANALYZE) `VERIFIED`. No new dependency. Catalog
+  Flyway V3 `product_indexes`: btree `products_category_id_idx`, GIN `gin_trgm_ops` indexes
+  `products_name_trgm_idx` on `lower(name)` and `products_sku_trgm_idx` on `lower(sku)`,
+  `CREATE EXTENSION IF NOT EXISTS pg_trgm`. Evidence is `ProductIndexPlanTest`: its own
+  postgres:16.15-alpine container, the catalog migrations, 200,000 products in 100 categories
+  (2,000 each, "dense") plus a "rare" category of 50 stored last; the statements are the ones
+  Hibernate sends for the product list and count (captured with `show-sql`), parameters bound
+  as `$1..$4`; every plan is a real `EXPLAIN (ANALYZE, BUFFERS)`, the time is the median of 5
+  runs after a warm-up; stages: V2 only, hand-made `category_id` index, trigram indexes, then
+  the real migration V3 (same plans). Two runs of the class (run 1 / run 2), no index against V3:
+  count of the dense category 26.5 / 34.6 ms against 3.7 / 6.1 ms; list of the rare category
+  33.5 / 35.3 against 0.20 / 0.30; list with search `f00ba` 328 / 361 against 0.68 / 1.03;
+  count with that search 160 / 203 against 0.57 / 0.55; list of the dense category 0.45 / 0.41
+  against 1.4 / 2.1 (slower: the `Limit` let the sequential scan stop after about 2,000 rows).
+  The btree on `category_id` left the search plans unchanged (328 ms against 328 ms); with a
+  forced generic plan the catch-all list stays a Seq Scan even with the index; with the default
+  `plan_cache_mode = auto` the count used the index in all 10 executions in both runs. The
+  exploratory first version of the lab (the same data without the rare category and the
+  migration stage) gave the same plan types and, for the baseline, 365 ms (list with the search) and 38 ms (count of the dense category).
+  catalog-service `clean verify`: 68 tests, 0 failures.
+  Live: the V3 migration ran at start of the rebuilt `catalog` and `catalog-2` as the
+  non-superuser `catalog_app`: `flyway_schema_history` versions 1 to 3 successful, the five
+  indexes of `products` present, `pg_trgm 1.6` installed. Search (`search=SPK`) and category
+  filter answered correctly straight from both instances; through the gateway the same request
+  returned 503 for the first minute after both catalog instances were restarted together and 200
+  in 6 of 6 tries after that (consistent with the open item "gateway registry after restart",
+  not investigated).
+  Guidebook `guidebooks/21-indexes-and-explain-analyze.md`. Limits: index sizes, write
+  overhead and build time not measured; nothing on `unit_id`; search terms shorter than 3
+  characters not measured; one dataset shape; plain `CREATE INDEX` (no `CONCURRENTLY`, unit 7.9);
+  no compose-scale dataset (the live database holds 3 products); CI has not run on this branch.
