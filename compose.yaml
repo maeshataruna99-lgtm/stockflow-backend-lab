@@ -150,8 +150,12 @@ services:
     container_name: stockflow-gateway
     environment:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
     depends_on:
       discovery:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     ports:
       # the single public entry point, localhost only

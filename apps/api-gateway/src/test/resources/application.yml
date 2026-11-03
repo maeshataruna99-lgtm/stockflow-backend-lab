@@ -14,3 +14,9 @@ spring:
 eureka:
   client:
     enabled: false
+
+management:
+  health:
+    redis:
+      enabled: false
+
