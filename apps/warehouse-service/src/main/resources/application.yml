@@ -38,3 +38,6 @@ management:
     web:
       exposure:
         include: health,info
+
+# lab setting: sample every request so each one can be followed in the logs
+management.tracing.sampling.probability: 1.0

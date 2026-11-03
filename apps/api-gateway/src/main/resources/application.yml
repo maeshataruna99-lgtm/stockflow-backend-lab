@@ -36,3 +36,9 @@ management:
 spring.cloud.gateway.server.webflux.httpclient:
   connect-timeout: 2000
   response-timeout: 1s
+
+# lab setting: sample every request so each one can be followed in the logs
+management.tracing.sampling.probability: 1.0
+
+# puts the trace id into reactive log lines (MDC) on the gateway
+spring.reactor.context-propagation: auto

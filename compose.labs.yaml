@@ -2,11 +2,18 @@
 # Use together with the core file:
 #   docker compose -f compose.yaml -f compose.labs.yaml up --build -d
 # It also exposes the metrics endpoint on both catalog instances (internal network only,
-# no host port) so the per-instance request count can be read.
+# no host port) so the per-instance request count can be read. It also turns on request-level DEBUG logs
+# on the gateway and catalog so the trace id (unit 5.8) is visible in their log lines.
 services:
   catalog:
     environment:
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics
+      # request lines at DEBUG, so the trace id shows up in the log (tracing lab, unit 5.8); env var names are lowercased, so use a package, not a class
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB_SERVLET: DEBUG
+
+  gateway:
+    environment:
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_CLOUD_GATEWAY_HANDLER: DEBUG
 
   catalog-2:
     build: ./apps/catalog-service
