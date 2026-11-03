@@ -1312,3 +1312,23 @@ labs).
   Limits: single-flight is per instance, so a herd across N instances costs up to
   N loads (unit 6.4); no distributed lock, no TTL jitter, no stale-while-revalidate;
  
+  no multi-process lab beyond one machine, one run per row.
+- 2026-11-03: unit 6.4 (distributed caching) `VERIFIED`. No production code and no
+  new dependency: the shared Redis key already serves every instance. New
+  `ProductCacheTwoInstancesTest` (3 tests) starts instance B as a second
+  application context against the same PostgreSQL and Redis containers as the
+  test's own context A. A entry loaded by A is a hit on B (B load +0, hit +1); an
+  update on A removes the key and B returns the new name with one load; 40 reads
+  split 20/20 over both instances with the key missing cost 1 load on A and 1 on B.
+  A first draft of the test passed B's properties with `.properties()`, which the
+  test `application.yml` overrode (`stockflow.cache.enabled: false`), so B ran with
+  the cache off and its counters stayed 0; command-line arguments fixed it.
+  Live on the lab stack (`catalog` + `catalog-2`, `labs/caching/distributed-lab.sh`):
+  read on `catalog` = 1 load, same read on `catalog-2` = 0 loads and 1 hit; PATCH
+  through the gateway returned 200, the key was gone, both instances returned the
+  new description with 1 load in total; 40 reads split 20/20 with the key missing:
+  all 200, `catalog` +1 load and `catalog-2` +1 load. One run per row, one machine.
+  catalog-service `clean verify`: 60 tests, 0 failures.
+  Limit: single-flight stays per instance, so a herd over N instances costs up to N
+  loads; no distributed lock. Guidebook `guidebooks/14-distributed-caching.md`.
+  Phase 6 gate review and a CI run on the branch are still to do.
