@@ -53,10 +53,11 @@ Key documents:
   policy lab, stampede lab with single-flight, two catalog instances on one
   Redis; 60 catalog tests, CI run 41628003809 green). Open items are in
   [docs/STATUS.md](docs/STATUS.md).
-- Phase 7 - Database engineering labs: IN PROGRESS (units 7.1 race condition, 7.2 locking, 7.3 deadlock,
-  7.4 isolation levels, 7.5 connection pooling, 7.6 N+1 queries, 7.7 indexes, 7.8 constraints and
-  7.9 zero-downtime migrations, 7.10 read replicas and 7.11 partitioning and sharding
-  VERIFIED 2026-11-03, evidence in [docs/STATUS.md](docs/STATUS.md)).
+- Phase 7 - Database engineering labs: VERIFIED on 2026-11-03 (gate closed; race condition, locking,
+  deadlock, isolation levels, connection pooling, N+1, indexes and EXPLAIN ANALYZE, constraints,
+  zero-downtime migration, a real read replica with replication lag, and partitioning and sharding as
+  isolated experiments; warehouse 100 and catalog 70 tests, CI run 41661725957 green). Open items are in
+  [docs/STATUS.md](docs/STATUS.md).
 - Phases 8-10: NOT STARTED. Resilience, messaging and observability
   labs follow the ROADMAP order.
 

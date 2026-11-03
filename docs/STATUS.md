@@ -1678,3 +1678,71 @@ Phase 6 overall: `VERIFIED`, gate closed, with the open items above.
   retention are claimed; no resharding or rebalancing under traffic; no cross-shard consistent read; no
   distributed transaction (none claimed); no compose lab; CI has not run on this branch.
   All eleven Phase 7 units have evidence; the Phase 7 gate review (CI on the whole branch) is still to do.
+
+## Phase 7 gate review (2026-11-03, closing Phase 7)
+
+CI evidence for the whole Phase 7 branch: GitHub Actions run 41661725957 (pull_request event, PR 5) on
+commit `fce2195`, matched to the PR head sha before use, concluded success with 4 of 4 matrix jobs
+passing (warehouse-service 100 tests, catalog-service 70, api-gateway 59, discovery-server 1; 0
+failures). Locally the same commit gave warehouse-service 100 and catalog-service 70 tests, 0 failures.
+
+| Unit | Topic | Guidebook | Evidence in the code |
+|---|---|---|---|
+| 7.1 | Race condition, lost update | 15 | `StockRaceConditionTest`, `labs/database/race-lab.sh` |
+| 7.2 | Optimistic and pessimistic locking | 16 | `StockLockingTest`, same lab script |
+| 7.3 | Deadlock | 17 | `StockDeadlockTest`, `labs/database/deadlock-lab.sh` |
+| 7.4 | Transactions, ACID, isolation levels | 18 | `IsolationLevelTest` |
+| 7.5 | Connection pooling | 19 | `ConnectionPoolTest`, `PoolSizingTest`, `DataSourceConfigTest`, `labs/database/pool-lab.sh` |
+| 7.6 | N+1 queries | 20 | `ProductListQueryCountTest` (catalog) |
+| 7.7 | Indexes, EXPLAIN ANALYZE | 21 | `ProductIndexPlanTest` (catalog), migration V3 |
+| 7.8 | Foreign key and unique constraints | 22 | `ConstraintTest`, `ConstraintErrorMappingTest`, `labs/database/constraint-lab.sh` |
+| 7.9 | Zero-downtime migrations | 23 | `ZeroDowntimeMigrationTest`, migrations V5 and V6 |
+| 7.10 | Read replicas, replication lag | 24 | `ReplicationLagTest`, compose profile `replica`, `labs/database/replica-lab.sh` |
+| 7.11 | Sharding and partitioning | 25 | `PartitioningTest`, `ShardingTest` (isolated experiments) |
+
+Acceptance criteria:
+
+- Each topic has a separate guidebook and lab with commands, expected outcome and trade-offs: `VERIFIED` for
+  the guidebook, lab or test, commands and trade-offs (guidebooks 15 to 25). Partly: prerequisites are not a
+  section of each guidebook; they are the README prerequisites (Java, Docker, `.env`) plus the commands in each
+  guidebook's reproduction section.
+- Concurrency tests use real PostgreSQL via Testcontainers: `VERIFIED` (postgres:16.15-alpine in every test of the
+  list above; the replica and shard labs use several containers).
+- The race condition lab shows the bug before the fix and asserts invariants after: `VERIFIED` (7.1: the safe
+  tests failed against the read-modify-write with 100 of 100 accepted for a stock of 50 and with a total of 208;
+  after the fix accepted plus left equals the stock).
+- The deadlock lab is bounded by a timeout and verifies rollback and recovery: `VERIFIED` (7.3: the deadlock
+  was resolved in 1541 ms, the test bounds it at 10 s, the loser's rollback left only the winner's unit, and the
+  retry restored the totals).
+- EXPLAIN ANALYZE output comes from the actual query and dataset: `VERIFIED` (7.7: the statements Hibernate sends,
+  captured with show-sql, on 200,000 products; no plan was written by hand).
+- Index claims compare actual plans and measured results: `VERIFIED` (7.7, two runs, including the cases where an
+  index did not help or made one query slower).
+- Zero-downtime migrations use expand, migrate, contract and explain backward compatibility: `VERIFIED` (7.9:
+  V5 and V6, the SQL of the old and the new release tested at every step, guidebook 23).
+- Read replica and replication lag labs use actual primary and replica infrastructure: `VERIFIED` (7.10: a real
+  streaming standby in both the compose profile and Testcontainers).
+- Sharding and partitioning are isolated experiments, not core architecture: `VERIFIED` (7.11: test code only;
+  the services and the compose stack use neither).
+
+Open items and carried notes:
+
+1. The gateway answered 503 for about a minute after a downstream service was restarted (seen after the catalog
+   restarts of unit 7.7 and the warehouse restart of 7.9; the same symptom was noted in Phase 5); not investigated, not fixed.
+2. Only the warehouse connection pool is bounded (10 connections, 3 s wait); the catalog still uses the HikariCP
+   defaults (30 s wait). No statement timeout anywhere.
+3. Every constraint violation is answered with 409; a check or not-null violation could rather be a 400 or 500.
+4. The lab endpoints (`withdraw-unsafe`, `-optimistic`, `-pessimistic`, `transfer-unordered`, `lab/hold`) ship in
+   the warehouse artifact and exist only with `stockflow.lab.unsafe-stock=true`; a test proves they are off by
+   default, but no test proves the production profile cannot switch them on.
+5. V5 and V6 (expand and contract) were applied by one deploy in this single-environment lab; in a real rollout V6
+   ships a release later.
+6. The services do not read from a replica; no rolling deploy with two live releases was run; sharding has no
+   rebalancing under traffic.
+7. Timings are single-machine measurements (one to three runs), not benchmarks; some were noisy and the
+   guidebooks say which claims rest on plan shape instead.
+8. Carried from earlier phases: Spring Boot 3.5 and Spring Cloud 2025.0 past OSS support; core Redis has no
+   `maxmemory`; one shared HS256 secret in three services; demo rows left in the compose databases (warehouses
+   `LAB-*`, `MIG-*`, `AUTH-*`, `LIVE-WH`, stock rows).
+
+Phase 7 overall: `VERIFIED`, gate closed, with the open items above.
