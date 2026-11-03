@@ -1374,3 +1374,33 @@ Open items and carried notes:
 6. Lab numbers are one run per row on one machine; they are not benchmarks.
 
 Phase 6 overall: `VERIFIED`, gate closed, with the open items above.
+
+## Phase 7 progress log
+
+- 2026-11-03: unit 7.1 (race condition and lost update) `VERIFIED`. Branch
+  `feat/phase7-database-labs`. No new dependency. warehouse-service gets Flyway V3
+  `stock_levels` (location FK, product id without FK, `CHECK (quantity >= 0)`, unique per
+  location and product), `POST /api/v1/stock`, `GET /api/v1/stock/{id}` and
+  `POST /api/v1/stock/{id}/withdraw` (ADMIN, 200/400/404/409). Decision by the user: the
+  lab lives in the warehouse as a `stock_levels` table.
+  Tests first against the naive read-modify-write `withdraw`: both safe tests failed
+  (`StockRaceConditionTest.neverTakesMoreThanInStock`: 100 of 100 accepted for a stock of
+  50; `takenPlusLeftEqualsStart`: accepted x 3 + left = 208 for a stock of 100). Fix:
+  `StockLevelRepository.withdraw` is one conditional `UPDATE ... WHERE id = :id AND quantity >= :n`,
+  0 rows = 404 or 409. The naive code stays as `StockService.withdrawUnsafe`, exposed
+  only by `StockLabController` when `stockflow.lab.unsafe-stock=true` (set in
+  `compose.labs.yaml`; `StockApiTest.unsafeEndpointIsOffByDefault` proves it is a 404
+  otherwise).
+  After the fix: `StockRaceConditionTest` 4 tests (safe: 50 accepted and 50 refused,
+  0 left; 33 x 3 + 1 = 100; unsafe: round 1 accepted 100 and left 93 of 100, so updates were
+  lost) and `StockApiTest` 6 tests, 0 failures. warehouse-service `clean verify`: 41 tests,
+  0 failures.
+  Live on the lab stack (`labs/database/race-lab.sh`, 100 simultaneous `wget` requests
+  from the gateway container straight at the warehouse): unsafe, stock 100: accepted 100,
+  left 88, 89 and 92 in three runs (accepted + left 188, 189, 192); unsafe, stock 50:
+  accepted 100, left 35; safe, stock 100: accepted 100, left 0 in all three runs; safe,
+  stock 50: accepted 50, 50 refused with 409, left 0. One run per row (three for stock 100),
+  one machine, not a benchmark. Guidebook `guidebooks/15-race-condition.md`.
+  Limits: the unsafe test is probabilistic (up to 10 rounds, the first round showed it);
+  the fix covers a single row, rules across rows are for the locking and isolation units;
+  stock endpoints are not routed by the gateway; CI has not run on this branch.
