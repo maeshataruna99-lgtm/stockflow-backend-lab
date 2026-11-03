@@ -8,6 +8,8 @@ services:
   catalog:
     environment:
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics
+      # stampede lab (unit 6.3): LAB_SINGLE_FLIGHT=false switches the protection off
+      STOCKFLOW_CACHE_SINGLE_FLIGHT: ${LAB_SINGLE_FLIGHT:-true}
       # request lines at DEBUG, so the trace id shows up in the log (tracing lab, unit 5.8); env var names are lowercased, so use a package, not a class
       LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB_SERVLET: DEBUG
 

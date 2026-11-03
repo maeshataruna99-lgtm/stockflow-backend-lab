@@ -98,6 +98,18 @@ class ProductCacheTest extends AbstractCatalogIntegrationTest {
     }
 
     @Test
+    @DisplayName("A cache hit does not take a database connection")
+    void hitDoesNotUseTheDatabase() throws Exception {
+        long id = createProduct("no connection on hit");
+        mockMvc.perform(get("/api/v1/products/" + id)).andExpect(status().isOk());
+        long acquired = meters.get("hikaricp.connections.acquire").timer().count();
+
+        mockMvc.perform(get("/api/v1/products/" + id)).andExpect(status().isOk());
+
+        assertThat(meters.get("hikaricp.connections.acquire").timer().count()).isEqualTo(acquired);
+    }
+
+    @Test
     @DisplayName("A PATCH evicts the entry after commit, so the next read is fresh from the database")
     void updateEvictsAndNextReadIsFresh() throws Exception {
         long id = createProduct("before");

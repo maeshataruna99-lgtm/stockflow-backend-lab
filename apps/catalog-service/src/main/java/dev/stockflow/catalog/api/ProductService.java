@@ -13,7 +13,9 @@ import dev.stockflow.catalog.repository.UnitRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Product use cases. Read methods map entities to DTOs inside the
@@ -27,15 +29,19 @@ public class ProductService {
     private final CategoryRepository categoryRepository;
     private final UnitRepository unitRepository;
     private final ProductCache productCache;
+    private final TransactionTemplate readOnlyTransaction;
 
     ProductService(ProductRepository productRepository,
                    CategoryRepository categoryRepository,
                    UnitRepository unitRepository,
-                   ProductCache productCache) {
+                   ProductCache productCache,
+                   PlatformTransactionManager transactionManager) {
         this.productRepository = productRepository;
         this.categoryRepository = categoryRepository;
         this.unitRepository = unitRepository;
         this.productCache = productCache;
+        this.readOnlyTransaction = new TransactionTemplate(transactionManager);
+        this.readOnlyTransaction.setReadOnly(true);
     }
 
     @Transactional(readOnly = true)
@@ -45,11 +51,14 @@ public class ProductService {
                 .map(ProductResponse::from);
     }
 
-    @Transactional(readOnly = true)
+    /**
+     * Not @Transactional as a whole: a cache hit must not take a database connection, so only the load from the
+     * database runs in a (read-only) transaction.
+     */
     public ProductResponse get(Long id) {
-        return productCache.getOrLoad(id, () -> productRepository.findById(id)
+        return productCache.getOrLoad(id, () -> readOnlyTransaction.execute(status -> productRepository.findById(id)
                 .map(ProductResponse::from)
-                .orElseThrow(() -> ResourceNotFoundException.of("product", id)));
+                .orElseThrow(() -> ResourceNotFoundException.of("product", id))));
     }
 
     @Transactional
