@@ -1,0 +1,116 @@
+### API Gateway JWT Authentication & Role Authorization Playground
+### Gateway runs on http://localhost:8080 (Single Entry Point)
+
+@gatewayUrl = http://localhost:8080
+
+### ==========================================================================
+### 1. DEMO AUTHENTICATION (Minting Tokens in non-prod profiles)
+### ==========================================================================
+
+### 1.1 Login as Root (ROLE_ADMIN + ROLE_USER)
+# @name rootLogin
+POST {{gatewayUrl}}/api/v1/auth/login
+Content-Type: application/json
+Accept: application/json
+
+{
+  "username": "root",
+  "password": "root_demo_password_123"
+}
+
+### Capture root access token
+@rootToken = {{rootLogin.response.body.accessToken}}
+
+### 1.2 Login as Demo User (ROLE_USER only)
+# @name userLogin
+POST {{gatewayUrl}}/api/v1/auth/login
+Content-Type: application/json
+Accept: application/json
+
+{
+  "username": "demo-user",
+  "password": "user_demo_password_123"
+}
+
+### Capture user access token
+@userToken = {{userLogin.response.body.accessToken}}
+
+### 1.3 Failed Login - Wrong Password (Expects 401 ProblemDetail)
+POST {{gatewayUrl}}/api/v1/auth/login
+Content-Type: application/json
+Accept: application/json
+
+{
+  "username": "root",
+  "password": "incorrect-password"
+}
+
+### ==========================================================================
+### 2. ROLE-BASED ACCESS CONTROL (RBAC) VERIFICATION
+### ==========================================================================
+
+### 2.1 Read Operation with ROLE_USER Token (Expects 200 OK)
+GET {{gatewayUrl}}/api/v1/products
+Authorization: Bearer {{userToken}}
+Accept: application/json
+
+### 2.2 Mutating Operation with ROLE_USER Token (Expects 403 Forbidden ProblemDetail)
+POST {{gatewayUrl}}/api/v1/products
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+Accept: application/json
+
+{
+  "sku": "FORBIDDEN-MOUSE-01",
+  "name": "Unauthorized Creation Item",
+  "categoryId": 1,
+  "unitId": 1
+}
+
+### 2.3 Mutating Operation with ROLE_ADMIN Token (Expects 201 Created)
+POST {{gatewayUrl}}/api/v1/products
+Authorization: Bearer {{rootToken}}
+Content-Type: application/json
+Accept: application/json
+
+{
+  "sku": "AUTHORIZED-KEYBOARD-01",
+  "name": "Admin Authorized Creation Item",
+  "categoryId": 1,
+  "unitId": 1
+}
+
+### 2.4 Warehouse Mutating Operation with ROLE_ADMIN Token (Expects 201 Created)
+POST {{gatewayUrl}}/api/v1/warehouses
+Authorization: Bearer {{rootToken}}
+Content-Type: application/json
+Accept: application/json
+
+{
+  "code": "WH-SOUTH-01",
+  "name": "South Distribution Hub"
+}
+
+### ==========================================================================
+### 3. SECURITY SAFEGUARDS & FAILURE PATHS
+### ==========================================================================
+
+### 3.1 Missing Authorization Header (Expects 401 Unauthorized ProblemDetail)
+GET {{gatewayUrl}}/api/v1/products
+Accept: application/json
+
+### 3.2 Forged/Tampered Token (Expects 401 Unauthorized ProblemDetail)
+GET {{gatewayUrl}}/api/v1/products
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJoYWNrZXIifQ.fake-signature
+Accept: application/json
+
+### 3.3 Expired Token (Expects 401 Unauthorized ProblemDetail)
+GET {{gatewayUrl}}/api/v1/products
+Authorization: Bearer eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJvbGQtdXNlciIsImlhdCI6MTYwMDAwMDAwMCwiZXhwIjoxNjAwMDAwMTAwfQ.fake
+Accept: application/json
+
+### 3.4 Anti-Spoofing Check: Gateway ignores client-supplied X-User-Id header
+GET {{gatewayUrl}}/api/v1/products
+Authorization: Bearer {{userToken}}
+X-User-Id: attacker-trying-to-impersonate-root
+Accept: application/json

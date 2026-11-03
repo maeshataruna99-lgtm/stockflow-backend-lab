@@ -38,9 +38,11 @@ multi-stage non-root Dockerfiles (unit 4.1), full six-service compose
 stack with internal network, Eureka registration, health checks,
 restart + volume preservation evidence (unit 4.2), and setup
 documentation with an opt-in hostdev override (unit 4.3); gate review
-below. Phase 5 - API gateway and its ten use cases: `IN PROGRESS` - unit 5.1
-(Dynamic Routing) `VERIFIED` on 2026-10-29 (evidence below); unit 5.2 (JWT
-authentication & authorization) is next. Phase 0 evidence below remains the gate.
+below. Phase 5 - API gateway and its ten use cases: `IN PROGRESS` - units 5.1
+(Dynamic Routing), 5.2 (JWT Authentication & Role Authorization) and 5.3
+(Redis-backed rate limiting) `VERIFIED` (evidence below; 5.3 against real
+Redis on 2026-11-03); unit 5.4 (circuit breaker) is next.
+Phase 0 evidence below remains the gate.
 
 ## Last verified commit
 
@@ -766,3 +768,86 @@ configuration question.
   All 10 tests across `api-gateway` passed green (`.\mvnw.cmd test` exit code 0).
   Deliverables created: `guidebooks/01-dynamic-routing.md` and runnable request
   collection `playground/http/gateway-dynamic-routing.http`.
+
+- 2026-10-29 14:22+07:00: unit 5.2 (JWT authentication and role authorization
+  in api-gateway) `VERIFIED`. Adopted ADR 0006 establishing HS256 JWT
+  specification (minimum 256-bit key entropy, claims `sub`, `roles`, `iss`,
+  `iat`, `exp`), perimeter least-privilege RBAC (`ROLE_USER` for GET, `ROLE_ADMIN`
+  for mutating verbs), and strict demo root account isolation fulfilling ADR 0003.
+  Dependencies added to `apps/api-gateway/pom.xml`: `spring-security-crypto`
+  (BCrypt password hashing) and `io.jsonwebtoken` (jjwt-api, jjwt-impl,
+  jjwt-jackson pinned to 0.12.6). Components implemented:
+  - `dev.stockflow.gateway.security.JwtService`: token generation and claims parsing.
+  - `dev.stockflow.gateway.security.JwtAuthenticationFilter`: reactive `GlobalFilter`
+    enforcing perimeter security, anti-spoofing header cleaning (`X-User-Id`,
+    `X-User-Roles` purged on ingress), verb-to-role authorization, downstream
+    context header injection, and standardized RFC 7807 `ProblemDetail` (401/403).
+  - `dev.stockflow.gateway.security.DemoAuthController`: profile-gated (`@Profile("!prod")`)
+    login endpoint `/api/v1/auth/login` validating root and demo-user credentials
+    using `BCryptPasswordEncoder`.
+  Automated tests in `JwtAuthenticationGatewayTest` (9 tests) and
+  `ProductionProfileSecurityTest` (1 test) executed live against local random port:
+  - Verified valid `ROLE_USER` read access (200) with downstream header propagation.
+  - Verified `ROLE_USER` mutation rejection with 403 Forbidden ProblemDetail.
+  - Verified `ROLE_ADMIN` mutation access (201) with downstream header propagation.
+  - Verified missing token (401), expired token (401), tampered signature (401).
+  - Verified anti-spoofing header cleaning prevents external identity forgery.
+  - Verified demo login success (200 with JWT) and failure (401 with ProblemDetail).
+  - Verified production profile isolation: `/api/v1/auth/login` returns 404 in `prod`.
+  All 20 tests across `api-gateway` passed green (`.\mvnw.cmd test` exit code 0).
+  Deliverables created: `docs/decisions/0006-gateway-jwt-authentication.md`,
+  `guidebooks/02-jwt-authentication-authorization.md`,
+  `playground/http/gateway-jwt-auth.http`, and `.env.example` updated with `JWT_SECRET`.
+
+- 2026-10-29 14:40+07:00: unit 5.3 (Redis-backed distributed rate limiting in api-gateway)
+  `VERIFIED`. Added `spring-boot-starter-data-redis-reactive` to `apps/api-gateway/pom.xml`.
+  Implemented token bucket distributed rate limiting utilizing Spring Cloud Gateway's
+  `RedisRateLimiter` and dynamic anti-spoofing `KeyResolver`:
+  - `dev.stockflow.gateway.ratelimit.RateLimitProperties`: binds `stockflow.gateway.rate-limit`
+    configuration (default replenishRate=10, burstCapacity=20, requestedTokens=1).
+  - `dev.stockflow.gateway.ratelimit.UserOrIpKeyResolver`: securely resolves rate-limiting key
+    from verified security context `stockflow.authenticated.user` (`user:<userId>`), falling
+    back to remote socket address (`ip:<remoteIp>`). Completely ignores any unverified
+    client-supplied `X-User-Id` headers to prevent identity spoofing and quota depletion attacks.
+  - `dev.stockflow.gateway.ratelimit.RateLimiterConfig`: reactive `RedisRateLimiter` bean
+    guarded with `@ConditionalOnMissingBean(RateLimiter.class)` to facilitate deterministic in-memory
+    testing without local Redis daemon dependencies.
+  - `dev.stockflow.gateway.config.GatewayRoutesConfig`: applied `requestRateLimiter` filter
+    configured with `setStatusCode(HttpStatus.TOO_MANY_REQUESTS)` to all catalog and warehouse routes.
+  - `compose.yaml`: api-gateway service updated with `SPRING_DATA_REDIS_HOST: redis`,
+    `SPRING_DATA_REDIS_PORT: 6379`, and `depends_on: redis`.
+  - `src/test/resources/application.yml`: configured `management.health.redis.enabled: false`
+    to keep gateway actuator health UP during in-memory WireMock tests.
+  Automated tests in `UserOrIpKeyResolverTest` (4 tests) and `RateLimitingGatewayTest` (2 tests):
+  - Verified authenticated request resolves to `user:<userId>`.
+  - Verified unauthenticated request falls back to `ip:<remoteAddress>`.
+  - Verified spoofed `X-User-Id` on unauthenticated request is safely ignored, resolving to client IP.
+  - Verified socket-less request falls back safely to `ip:anonymous`.
+  - Verified normal traffic within quota returns 200 OK + `X-RateLimit-*` headers, routing to downstream.
+  - Verified burst traffic exceeding quota returns 429 Too Many Requests, blocking downstream invocation.
+  All 26 tests across `api-gateway` passed green (`.\mvnw.cmd test` exit code 0).
+  Deliverables created: `guidebooks/03-redis-rate-limiting.md` and runnable request collection
+  `playground/http/gateway-rate-limiting.http`.
+
+- 2026-11-03: real-Redis check of unit 5.3 against the compose stack
+  (Windows, Docker 29.7.2). `docker compose up --build -d`: all six
+  containers healthy, including api-gateway with the Redis dependency.
+  Login as the demo user, then 40 sequential requests to
+  `GET /api/v1/products` all returned 200 (the bucket refills 10/s, so a
+  sequential loop never drains 20 tokens). `redis-cli --scan` then showed
+  `request_rate_limiter.{catalog-products-route.user:demo-user}.tokens`
+  and `.timestamp`: the limiter writes per-user keys to Redis. A parallel
+  burst (80 requests, 40 at a time, after a 3 s pause) gave 59x 200 and
+  21x 429. A follow-up request returned `X-RateLimit-Remaining: 9`,
+  `Burst-Capacity: 20`, `Replenish-Rate: 10`. Single run, local machine.
+  The unit tests (26/26, `.\mvnw.cmd clean verify` exit 0) still use the
+  in-memory limiter; this entry is the only Redis-backed proof.
+  Also recorded: commit `1f798c3` (5.2 alone) was built in a clean
+  worktree, 20/20 tests green; commit `b9b6fbf` is 5.3. Not yet run: CI
+  for these two commits.
+  Open findings from this check, not fixed here: (1) `DemoAuthController`
+  has working default passwords in `@Value` defaults and `JwtProperties`
+  has a default signing secret, which conflicts with the "no working
+  password in source" rule in ROADMAP section 2; the compose gateway ran
+  without `JWT_SECRET` set. (2) `AGENTS.md` is untracked and not in
+  `.gitignore`; AGENT_RULES says it must stay local.

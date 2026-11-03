@@ -1,0 +1,84 @@
+### API Gateway Redis-Backed Distributed Rate Limiting Playground
+### Gateway runs on http://localhost:8080 (Single Entry Point)
+
+@gatewayUrl = http://localhost:8080
+
+### ==========================================================================
+### 1. OBTAIN JWT TOKEN (For user-specific rate limiting bucket)
+### ==========================================================================
+
+### 1.1 Login as Demo User
+# @name userLogin
+POST {{gatewayUrl}}/api/v1/auth/login
+Content-Type: application/json
+Accept: application/json
+
+{
+  "username": "demo-user",
+  "password": "user_demo_password_123"
+}
+
+### Capture user token
+@userToken = {{userLogin.response.body.accessToken}}
+
+### ==========================================================================
+### 2. NORMAL QUOTA CONSUMPTION (Expects 200 OK + Rate-Limit Headers)
+### ==========================================================================
+
+### 2.1 Authenticated Request (Key resolved as "user:<userId>")
+### Inspect response headers:
+###   X-RateLimit-Replenish-Rate: 10
+###   X-RateLimit-Burst-Capacity: 20
+###   X-RateLimit-Remaining: 19
+GET {{gatewayUrl}}/api/v1/products
+Authorization: Bearer {{userToken}}
+Accept: application/json
+
+### 2.2 Anonymous / Unauthenticated Request (Key resolved as "ip:<remoteIp>")
+### Falls back to client remote socket IP
+GET {{gatewayUrl}}/api/v1/products
+Accept: application/json
+
+### ==========================================================================
+### 3. ANTI-SPOOFING VERIFICATION
+### ==========================================================================
+
+### 3.1 Unauthenticated request attempting to inject X-User-Id
+### The gateway MUST ignore "X-User-Id: victim" and rate-limit by client IP instead.
+GET {{gatewayUrl}}/api/v1/products
+X-User-Id: victim-account-id
+Accept: application/json
+
+### ==========================================================================
+### 4. QUOTA EXHAUSTION / BURST FLOOD SIMULATION
+### ==========================================================================
+
+### Execute these in rapid succession (>20 requests in <1 second)
+### The first 20 requests will succeed (burstCapacity = 20).
+### Subsequent requests will immediately receive:
+### HTTP/1.1 429 Too Many Requests
+### Downstream microservices (catalog-service) will NOT receive excess traffic.
+
+# Request Burst 01
+GET {{gatewayUrl}}/api/v1/products
+Authorization: Bearer {{userToken}}
+
+###
+# Request Burst 02
+GET {{gatewayUrl}}/api/v1/products
+Authorization: Bearer {{userToken}}
+
+###
+# Request Burst 03
+GET {{gatewayUrl}}/api/v1/products
+Authorization: Bearer {{userToken}}
+
+###
+# Request Burst 04
+GET {{gatewayUrl}}/api/v1/products
+Authorization: Bearer {{userToken}}
+
+###
+# Request Burst 05
+GET {{gatewayUrl}}/api/v1/products
+Authorization: Bearer {{userToken}}
