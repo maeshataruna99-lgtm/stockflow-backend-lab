@@ -1332,3 +1332,45 @@ labs).
   Limit: single-flight stays per instance, so a herd over N instances costs up to N
   loads; no distributed lock. Guidebook `guidebooks/14-distributed-caching.md`.
   Phase 6 gate review and a CI run on the branch are still to do.
+
+## Phase 6 gate review (2026-11-03, closing Phase 6)
+
+CI evidence for the whole Phase 6 branch: GitHub Actions run 41628003809
+(pull_request event, PR 4) on commit `d7a1945`, matched to the PR head sha before
+use, concluded success with 4 of 4 matrix jobs passing (catalog-service 60 tests,
+api-gateway 59, warehouse-service 31, discovery-server 1; 0 failures).
+Two earlier runs of this PR failed in `RedisEvictionPolicyTest`
+(`allkeysLruKeepsTheHotKeys`, `volatileLruWithTtlEvicts`: 16 and 8, then 21 and
+17 of 50 hot keys kept, 45 expected). Cause: Redis ages keys in whole seconds and
+its own baseline uses about 1 MB of the 2 MB cap (measured 987 KB), so on a fast
+runner about 1000 cold keys shared a second with the hot reads. The tests now
+pause 1.1 s before each hot read, every 250 keys; assertions were not changed.
+The failure was not reproducible on the development machine; CI is the evidence.
+
+| Unit | Guidebook | Lab or http file | Automated tests | Live evidence |
+|---|---|---|---|---|
+| 6.1 Cache-aside, invalidation, Redis failure | 11 | product-cache.http | ProductCacheTest 6, ProductCacheRedisDownTest 2, RedisTimeoutConfigTest 2 | miss then hit, TTL, PATCH evicts, Redis stopped: 200 from the database |
+| 6.2 Eviction | 12 | labs/caching/eviction-lab.sh | RedisEvictionPolicyTest 5, ProductCacheFullRedisTest 2 | four policies on a capped Redis |
+| 6.3 Stampede | 13 | labs/caching/stampede-lab.sh | ProductCacheStampedeTest 3, ProductCacheStampedeUnprotectedTest 2 | 1,1,1 loads with single-flight, 7,6,5 without |
+| 6.4 Distributed caching | 14 | labs/caching/distributed-lab.sh | ProductCacheTwoInstancesTest 4 | two catalog containers, one Redis |
+
+Acceptance criteria:
+
+- Catalog read path shows cache miss then hit: `VERIFIED` (ProductCacheTest.missThenHit; live counters).
+- Update invalidates after the DB commit: `VERIFIED` (updateEvictsAndNextReadIsFresh; rolledBackUpdateKeepsTheEntry).
+- Database remains the source of truth: `VERIFIED` (entries are copies with a TTL, a 404 is never cached, Redis down falls back to the database).
+- Redis failure behavior explicit and tested: `VERIFIED` (ProductCacheRedisDownTest, RedisTimeoutConfigTest, ProductCacheFullRedisTest, gateway limiter fail-open).
+- Eviction lab has a controlled memory and policy configuration: `VERIFIED` (2 MB cap in tests, `redis-lab` with `LAB_REDIS_MAXMEMORY` and `LAB_REDIS_POLICY` in compose.labs.yaml).
+- Stampede lab has reproducible concurrent requests and a measured observation: `VERIFIED` (40 simultaneous requests: test 1 load against 40 without protection; live numbers in guidebook 13).
+- Distributed caching uses multiple app instances and shared Redis: `VERIFIED` (two application contexts in the test; `catalog` and `catalog-2` containers live).
+
+Open items and carried notes:
+
+1. Core Redis has no `maxmemory` and is shared by the product cache and the gateway rate limiter: open, decision pending (an eviction policy would also remove rate-limit keys).
+2. Single-flight is per instance: a herd over N instances costs up to N loads; no distributed lock, no TTL jitter, no stale-while-revalidate.
+3. Stale window around an eviction (a reader that loaded the old row just before a commit can re-store it): bounded by the 60 s TTL, no version column.
+4. Gateway startup readiness (503 on the first request about 45 s after a restart): still open, minor.
+5. Spring Boot 3.5 and Spring Cloud 2025.0 past OSS end of support; tracing has no exporter (Phase 10).
+6. Lab numbers are one run per row on one machine; they are not benchmarks.
+
+Phase 6 overall: `VERIFIED`, gate closed, with the open items above.
