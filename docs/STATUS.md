@@ -1451,3 +1451,20 @@ Phase 6 overall: `VERIFIED`, gate closed, with the open items above.
   `guidebooks/17-deadlock.md`.
   Limits: two rows only; ordering relies on the lock order of one SELECT with ORDER BY;
   deadlocks from foreign key locks are not covered; CI has not run on this branch.
+- 2026-11-03: unit 7.4 (transactions, ACID, isolation levels) `VERIFIED`. No production code
+  and no new dependency. `IsolationLevelTest` (10 tests incl. the inherited context test) drives
+  two JDBC connections from one thread in a fixed order against the real PostgreSQL container, so no
+  outcome depends on timing. Observed: no dirty read even at READ UNCOMMITTED; non-repeatable
+  read at READ COMMITTED (10 then 7) and not at REPEATABLE READ (10 then 10); phantom read at
+  READ COMMITTED (2 then 3 rows) and not at REPEATABLE READ (2 then 2); lost update at READ
+  COMMITTED (two withdrawals of 3 from 10 leave 7, not 4) and a 40001 rejection at REPEATABLE
+  READ with the row left at 7; write skew across two rows accepted at REPEATABLE READ (total 0,
+  rule "at least 1 left" broken) and rejected at SERIALIZABLE with 40001 (`could not serialize
+  access due to read/write dependencies among transactions`, reason `Canceled on identification
+  as a pivot, during write`, raised at the UPDATE; total stays 1). The two runs of the class
+  both passed; the tests passed on their first run, so there is no earlier red state. Guidebook
+  `guidebooks/18-isolation-levels.md`.
+  Limits: no compose lab for this unit (the tests give an exact interleaving that background
+  processes would not); the lock-based fix for write skew is not tested here, only SERIALIZABLE;
+  the SERIALIZABLE retry is described, not implemented; the READ UNCOMMITTED row of the table in
+  the guidebook is proven only for dirty reads; CI has not run on this branch.
