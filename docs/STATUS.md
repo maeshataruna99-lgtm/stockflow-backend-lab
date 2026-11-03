@@ -1404,3 +1404,28 @@ Phase 6 overall: `VERIFIED`, gate closed, with the open items above.
   Limits: the unsafe test is probabilistic (up to 10 rounds, the first round showed it);
   the fix covers a single row, rules across rows are for the locking and isolation units;
   stock endpoints are not routed by the gateway; CI has not run on this branch.
+- 2026-11-03: unit 7.2 (optimistic and pessimistic locking) `VERIFIED`. No new dependency.
+  Flyway V4 adds `stock_levels.version`. `StockService.withdrawOptimistic` re-reads and
+  retries a `UPDATE ... WHERE version = :read` at most `stockflow.stock.optimistic-attempts`
+  (5) times, then a 409 "Concurrent update"; `withdrawPessimistic` uses
+  `SELECT ... FOR UPDATE` with a transaction-local `lock_timeout`
+  (`stockflow.stock.lock-timeout`, 2 s), a timeout is a 503 "Row locked". Both are lab
+  endpoints behind `stockflow.lab.unsafe-stock`. The entity `version` is read-only on
+  purpose, not a JPA `@Version`, because `@Version` would make the unsafe path of 7.1
+  fail with an optimistic lock exception and hide the bug; the atomic withdraw also adds 1
+  to the version. `StockLockingTest` 6 tests (tests written before the code, red by
+  compile error, then green): optimistic keeps accepted + left = 100 (accepted 54, gave up
+  46, 275 retries) and never oversells at stock 50; pessimistic accepts 100 of 100 and
+  leaves 0, accepts exactly 50 of 100 at stock 50; a withdrawal blocked by a lock held in
+  another transaction gave up after 2040 ms. warehouse-service `clean verify`: 47 tests,
+  0 failures.
+  Live on the lab stack (`labs/database/race-lab.sh`, 100 simultaneous requests, stock 100,
+  three runs): optimistic accepted 46, 52, 52 (left 54, 48, 48, accepted + left 100 each
+  time); pessimistic accepted 100, left 0 each time; atomic UPDATE accepted 100, left 0;
+  unsafe left 91, 88, 92. Stock 50: optimistic accepted 44, left 6; pessimistic accepted 50,
+  left 0; atomic accepted 50, left 0; unsafe accepted 100, left 40. One run per row (three at
+  stock 100), one machine, not a benchmark. Guidebook
+  `guidebooks/16-optimistic-and-pessimistic-locking.md`.
+  Limits: single row only; optimistic gives up about half of the requests under 100-way
+  contention on one row, which is the finding, not a tuning target; `lock_timeout` is
+  PostgreSQL specific; CI has not run on this branch.
