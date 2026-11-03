@@ -60,6 +60,8 @@ public class GatewayRoutesConfig {
                         .setName(breakerName)
                         .setFallbackUri("forward:/fallback")
                         .setStatusCodes(Set.of("500", "502", "503", "504")))
+                .removeResponseHeader("Server")
+                .addResponseHeader("X-Content-Type-Options", "nosniff")
                 .retry(c -> c
                         .setRetries(retry.getRetries())
                         .setMethods(HttpMethod.GET)
