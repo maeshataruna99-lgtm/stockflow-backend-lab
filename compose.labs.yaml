@@ -114,3 +114,18 @@ services:
       start_period: 10s
     networks:
       - stockflow
+
+  # Messaging lab (Phase 9): RabbitMQ broker with the management HTTP API on the internal network only (no host ports).
+  # Not started by default: docker compose -f compose.yaml -f compose.labs.yaml --profile messaging up -d rabbitmq
+  rabbitmq:
+    image: rabbitmq:3.13.7-management-alpine
+    container_name: stockflow-rabbitmq
+    profiles: ["messaging"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+    networks:
+      - stockflow
