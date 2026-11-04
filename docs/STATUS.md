@@ -1778,8 +1778,8 @@ verified in Phase 5 (units 5.3, 5.4, 5.5) and are not rebuilt (unit 8.3 is only 
 - 2026-11-04: unit 8.4 (liveness and readiness) `DONE`. `management.endpoint.health.probes.enabled` in all four services; liveness
   is `livenessState`, readiness is `readinessState` plus `db` for catalog and warehouse (Redis stays out). The gateway's JWT filter
   exempted only the exact path `/actuator/health`; it now exempts `/actuator/health/**`. Compose health checks call the readiness
-  endpoint. Tests: `HealthProbesTest` (warehouse 3 tests incl. the database frozen with `docker pause`: readiness 503 after 2460
-  ms, liveness 200, recovery to 200; catalog 2), `ProbeConfigTest` (warehouse, catalog, reads the real yml),
+  endpoint. Tests: `HealthProbesTest` (warehouse 2 tests: groups, probes open) and `DatabaseOutageHealthTest` (warehouse, a container of its
+  own is stopped: readiness 503 after 1618 ms, liveness 200; catalog 2 tests), `ProbeConfigTest` (warehouse, catalog, reads the real yml),
   `HealthProbesGatewayTest`. Live (`labs/resilience/probes-lab.sh`, 1 run): database up 200/200; frozen: liveness 200 and readiness
   503 for warehouse and catalog; unfrozen 200/200. All four services healthy with the readiness check. The Eureka registry is not
   tied to readiness (not changed, not tested).
@@ -1819,3 +1819,10 @@ Open items and limits of Phase 8 so far: the Eureka registry is not connected to
 retry code is lab code, not used by a service; the idempotency table is purged hourly but the retention is not tested over time;
 scale numbers are noisy single-machine runs; the gateway 503 after a downstream restart (Phase 5/7 open item) was not re-tested
 in this phase and is still not fixed; `stop_grace_period` was only exercised on the warehouse.
+- 2026-11-04: CI finding on PR 6. The first CI run of `feat/phase8-resilience-labs` hung in `warehouse-service` for 44 minutes: the
+  log (read after cancelling the run) shows `HealthProbesTest` started at 04:55:28Z and never finished. Cause: its test that froze the
+  shared PostgreSQL container with `docker pause` (passed on the Windows Docker host in 2.5 s) waits without an end on Linux. The other
+  three jobs were green (gateway, catalog, discovery). Fix: that test was removed and replaced by `DatabaseOutageHealthTest` with its
+  own container that is stopped (connection refused); the frozen database remains shown by `labs/resilience/probes-lab.sh`. The
+  GitHub job timeout is 6 hours and the build has no per-test timeout, so a hang costs hours; a surefire fork timeout was not added
+  (build config is outside this task). The run was cancelled by me, which does not count as a CI result.

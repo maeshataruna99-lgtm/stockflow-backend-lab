@@ -31,15 +31,6 @@ public abstract class AbstractWarehouseIntegrationTest {
         POSTGRES.start();
     }
 
-    /** Freezes the database process: connections hang instead of being refused, like a database that is up but stuck. */
-    protected static void pauseDatabase() {
-        POSTGRES.getDockerClient().pauseContainerCmd(POSTGRES.getContainerId()).exec();
-    }
-
-    protected static void resumeDatabase() {
-        POSTGRES.getDockerClient().unpauseContainerCmd(POSTGRES.getContainerId()).exec();
-    }
-
     @Test
     void contextLoadsWithRealDatabase() {
         // passing context is the assertion: Flyway migrated, Hibernate

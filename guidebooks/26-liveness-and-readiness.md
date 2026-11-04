@@ -23,11 +23,11 @@ All four services (`catalog-service`, `warehouse-service`, `api-gateway`, `disco
 |---|---|
 | Groups (`HealthProbesTest`, warehouse and catalog) | liveness does not contain `db`; readiness does; the catalog's readiness does not contain `redis` |
 | Probes without a token (warehouse, catalog, gateway tests) | 200 `{"status":"UP"}` for both |
-| Warehouse test, PostgreSQL container frozen with `docker pause` (connections hang), Hikari wait shortened to 1.5 s | readiness 503 `DOWN` after 2460 ms; liveness 200 `UP`; after the unfreeze readiness is 200 again |
+| Warehouse test `DatabaseOutageHealthTest`: a PostgreSQL container of its own is stopped (connection refused), Hikari wait shortened to 1.5 s | readiness 503 `DOWN` after 1618 ms; liveness 200 `UP` |
 | Live (`labs/resilience/probes-lab.sh`), the compose PostgreSQL frozen | warehouse and catalog: liveness 200 and readiness 503 while frozen; both 200 again after the unfreeze; database up at the start: 200 and 200 |
 | Compose health checks | all four services reached `healthy` with the readiness endpoint as the check |
 
-One run of the warehouse test and one of the live lab. The 2460 ms is bounded by the shortened Hikari waits of that test; with the production settings (3 s connection wait) a check takes longer to fail.
+One run of the warehouse test and one of the live lab. The 1618 ms is bounded by the shortened Hikari waits of that test; with the production settings (3 s connection wait) a check takes longer to fail. History: the first version of this test froze the shared test container with `docker pause` and passed on Windows (readiness 503 after 2460 ms, recovery to 200), but hung for 43 minutes in the Linux CI runner, where connections to a frozen server wait for an answer that never comes; it was replaced by the stopped-container test. The frozen database is still shown by the live lab, which finished in seconds on the Windows Docker host; that result is not evidence that it is safe in a Linux CI test.
 
 ## 4. Reproduction
 
@@ -47,7 +47,7 @@ labs/resilience/probes-lab.sh
 
 - The Eureka registry does not use these probes (the Eureka client's own health check is off by default), so a service whose readiness is DOWN still shows as UP in Eureka and the gateway can still route to it. Connecting readiness to the registry is not done and was not tested.
 - A readiness check that queries the database on every call adds load; Spring's `db` indicator runs a trivial validation query. Orchestrators call probes every few seconds.
-- A frozen database makes the check wait for the connection timeout before it fails; a refused connection fails at once.
+- A frozen database makes the check wait for the connection timeout before it fails, and in the CI runner a frozen container made a test hang for 43 minutes; a refused connection fails at once.
 - A liveness check that is too strict (for example one that depends on a thread pool) can kill a busy but healthy service.
 - `diskSpace` and other indicators stay in the aggregate `/actuator/health` but not in either group; the aggregate is no longer used by Compose.
 
