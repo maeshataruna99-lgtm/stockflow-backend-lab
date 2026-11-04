@@ -50,3 +50,14 @@ spring.data.redis.connect-timeout: 300ms
 management.health.redis.enabled: false
 stockflow.cache.enabled: true
 stockflow.cache.product-ttl: 60s
+
+# Liveness says the process is alive and not wedged, so it must not depend on the database; readiness says traffic
+# may be sent here, so it does (guidebook 26). The two answers are different on purpose.
+management.endpoint.health.probes.enabled: true
+management.endpoint.health.group.liveness.include: livenessState
+management.endpoint.health.group.readiness.include: readinessState,db
+
+# Graceful shutdown: on SIGTERM stop taking new connections, let requests in flight finish for up to 20 s (guidebook 27).
+# The container stop_grace_period in compose.yaml is longer than this.
+server.shutdown: graceful
+spring.lifecycle.timeout-per-shutdown-phase: 20s

@@ -88,13 +88,14 @@ services:
       - "127.0.0.1:8761:8761"
     healthcheck:
       # busybox wget ships in the Temurin Alpine runtime image
-      test: ["CMD-SHELL", "wget -q http://localhost:8761/actuator/health -O /dev/null"]
+      test: ["CMD-SHELL", "wget -q http://localhost:8761/actuator/health/readiness -O /dev/null"]
       interval: 10s
       timeout: 3s
       retries: 12
       start_period: 40s
     networks:
       - stockflow
+    stop_grace_period: 30s
     restart: unless-stopped
 
   catalog:
@@ -114,13 +115,14 @@ services:
       discovery:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -q http://localhost:8081/actuator/health -O /dev/null"]
+      test: ["CMD-SHELL", "wget -q http://localhost:8081/actuator/health/readiness -O /dev/null"]
       interval: 10s
       timeout: 3s
       retries: 12
       start_period: 40s
     networks:
       - stockflow
+    stop_grace_period: 30s
     restart: unless-stopped
 
   warehouse:
@@ -138,13 +140,14 @@ services:
       discovery:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -q http://localhost:8082/actuator/health -O /dev/null"]
+      test: ["CMD-SHELL", "wget -q http://localhost:8082/actuator/health/readiness -O /dev/null"]
       interval: 10s
       timeout: 3s
       retries: 12
       start_period: 40s
     networks:
       - stockflow
+    stop_grace_period: 30s
     restart: unless-stopped
 
   gateway:
@@ -168,13 +171,14 @@ services:
       # the single public entry point, localhost only
       - "127.0.0.1:8080:8080"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q http://localhost:8080/actuator/health -O /dev/null"]
+      test: ["CMD-SHELL", "wget -q http://localhost:8080/actuator/health/readiness -O /dev/null"]
       interval: 10s
       timeout: 3s
       retries: 12
       start_period: 40s
     networks:
       - stockflow
+    stop_grace_period: 30s
     restart: unless-stopped
 
 networks:

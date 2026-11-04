@@ -38,13 +38,14 @@ services:
       discovery:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -q http://localhost:8081/actuator/health -O /dev/null"]
+      test: ["CMD-SHELL", "wget -q http://localhost:8081/actuator/health/readiness -O /dev/null"]
       interval: 10s
       timeout: 3s
       retries: 12
       start_period: 40s
     networks:
       - stockflow
+    stop_grace_period: 30s
     restart: unless-stopped
 
   # Eviction lab (unit 6.2): a separate, memory-capped Redis, so the experiment cannot evict the gateway's
