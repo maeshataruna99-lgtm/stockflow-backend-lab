@@ -5,52 +5,22 @@ that actually ran. A checkbox is tracking, not evidence.
 
 ## Current phase
 
-Phase 0 - repository and design baseline: `VERIFIED` (committed as
-`24addaa`).
-Phase 1 - Maven/Spring Boot foundations: `VERIFIED` (2026-10-28, gate
-closed - evidence below).
-Phase 2 - PostgreSQL, Flyway and seed data: `VERIFIED` (2026-10-28, gate
-closed - evidence below). Gate review 2026-10-28: every deliverable and
-acceptance criterion has live evidence (compose service + volume +
-healthcheck; two owned databases with isolated least-privilege roles,
-four-way psql isolation proof; Flyway V1+V2 success on both databases
-from version 0; deterministic seeds stable across restart). Two
-root-user items are deliberately deferred to Phase 5 per ADR 0003
-(nothing can seed or verify a user before auth exists) - carried as an
-obligation there, not as an open risk here. Phase 3 - JPA persistence,
-/api/v1 endpoints and Testcontainers tests - is in progress, one unit
-per commit: unit 3.1 (JPA foundation in catalog-service) `VERIFIED`
-2026-10-28, unit 3.2 (catalog products API) `VERIFIED` 2026-10-28,
-unit 3.3 (warehouse API) `VERIFIED` 2026-10-28, unit 3.4 (OpenAPI)
-`VERIFIED` 2026-10-28. Gate review 2026-10-28: every Phase 3
-deliverable and acceptance criterion has recorded evidence - all six
-catalog endpoints and all six warehouse endpoints live-proven; 400/404/
-409 contracts proven on both services; entities never serialized
-(DTO-only + open-in-view off + VIA_DTO page serialization); pagination
-capped at 100; the documented JPQL query exercised; 19 catalog + 17
-warehouse tests green locally and in CI; springdoc 2.10.0 serves
-/v3/api-docs and Swagger UI on both services with documents matching
-actual behavior. Two items are deliberately deferred with their owning
-phases: production-profile root seeding (Phase 5, ADR 0003) and
-production-profile verification (Phase 4). Phase 4 - Docker Compose
-core and service discovery: `VERIFIED` 2026-10-28, gate closed -
-multi-stage non-root Dockerfiles (unit 4.1), full six-service compose
-stack with internal network, Eureka registration, health checks,
-restart + volume preservation evidence (unit 4.2), and setup
-documentation with an opt-in hostdev override (unit 4.3); gate review
-below. Phase 5 - API gateway and its ten use cases: `IN PROGRESS` - units 5.1
-(Dynamic Routing), 5.2 (JWT Authentication & Role Authorization) and 5.3
-(Redis-backed rate limiting) `VERIFIED` (evidence below; 5.3 against real
-Redis on 2026-11-03); unit 5.4 (circuit breaker) `VERIFIED` 2026-11-03; 5.5 (load balancing) `VERIFIED` 2026-11-03; 5.6 (timeout and retry) `VERIFIED` 2026-11-03; 5.7 (request ID) `VERIFIED` 2026-11-03; 5.8 (tracing) `VERIFIED` 2026-11-03; 5.9 (error contract) `VERIFIED` 2026-11-03; 5.10 (API versioning) `VERIFIED` 2026-11-03; all ten Phase 5 units are verified; the Phase 5 gate review (below) found it not closable yet.
-Phase 0 evidence below remains the gate.
+All ten phases (Phase 0 through Phase 10) are `VERIFIED` (2026-11-04):
+- Phase 0 - repository and design baseline: `VERIFIED` (`24addaa`).
+- Phase 1 - Maven/Spring Boot foundations: `VERIFIED` (2026-10-28).
+- Phase 2 - PostgreSQL, Flyway and seed data: `VERIFIED` (2026-10-28).
+- Phase 3 - JPA persistence, `/api/v1` endpoints and Testcontainers tests: `VERIFIED` (2026-10-28).
+- Phase 4 - Docker Compose core and service discovery: `VERIFIED` (2026-10-28).
+- Phase 5 - API gateway and its ten use cases: `VERIFIED` (2026-11-03, CI run 41580832608).
+- Phase 6 - Redis and caching labs: `VERIFIED` (2026-11-03, CI run 41628003809).
+- Phase 7 - Database engineering labs: `VERIFIED` (2026-11-03, CI run 41661725957).
+- Phase 8 - Resilience and traffic labs: `VERIFIED` (2026-11-04, CI run 41781129839).
+- Phase 9 - Messaging and distributed-system labs: `VERIFIED` (2026-11-04, merged to `main` as `5d810a0`; warehouse 154 tests + live RabbitMQ DLQ & webhook labs).
+- Phase 10 - Observability, docs and release: `VERIFIED` (2026-11-04; `discovery-server` 1 test, `api-gateway` 68 tests, `catalog-service` 74 tests, `warehouse-service` 161 tests, 0 failures; live Jaeger distributed tracing and structured correlation/redaction lab `labs/observability/tracing-lab.sh` verified).
 
 ## Last verified commit
 
-`e59df72` (feat(compose): core stack with internal network and
-discovery) is the latest code state, verified green by Actions run
-40674415027 (all four matrix jobs SUCCESS); the latest commit is the
-docs commit `0070255` (local setup guide + hostdev override, run
-40674854953 SUCCESS). Earlier chain: unit 4.1
+`5d810a0` (`Merge branch 'feat/phase9-messaging-labs'`, pushed to `origin/main` on 2026-11-04), followed by Phase 10 (`feat/phase10-observability-release`). Earlier chain: Phase 8 PR 6 (CI run 41781129839), Phase 7 (CI run 41661725957), Phase 6 (CI run 41628003809), Phase 5 (CI run 41580832608), Phase 4 commit `e59df72` (Actions run 40674415027), docs commit `0070255` (run 40674854953). Earlier chain: unit 4.1
 commit `34778ed` (Dockerfiles, run 40673481363), docs commit `1a9117b`;
 unit 3.4 commit `f642b38` (run 40669289647, catalog 19 + warehouse 17
 tests), docs commit `adbc761`; unit 3.3 commit `30648a8` (run
@@ -2019,3 +1989,64 @@ Open items and limits of Phase 9:
 4. Default webhook secret in `StockProperties` is a lab default (`whsec_stockflow_lab_default_signing_secret_32b`); production deployments
    must override `STOCKFLOW_STOCK_WEBHOOK_SECRET`.
 5. GitHub Actions CI has not run on `feat/phase9-messaging-labs` yet (branch is local until push/PR is requested).
+
+
+## Phase 10 progress log (2026-11-04)
+
+- **Unit 10.1 (Actuator health/metrics, structured correlation logging & sensitive redaction)**: `VERIFIED` 2026-11-04.
+  `SecurityConfig` in `warehouse-service` requires `ROLE_ADMIN` on `/actuator/metrics/**` (matching `catalog-service`), while
+  `/actuator/health/**` and `/actuator/info` stay public and `/actuator/env` stays denied. `RequestCorrelationFilter`
+  (`OncePerRequestFilter`) validates incoming `X-Request-Id` against `[A-Za-z0-9._-]{1,64}` (or generates a UUID), echoes
+  `X-Request-Id` and `X-Trace-Id` on the HTTP response, binds `requestId`, `traceId`, and `spanId` into SLF4J `MDC`, tags the active
+  OpenTelemetry span with `http.request_id`, and writes a structured `key=value` log line (`event=http_request service=warehouse-service ...`).
+  `SensitiveDataRedactor` scrubs `Authorization`, `Cookie`, `Set-Cookie`, `X-Webhook-Signature`, `password`, `secret`, `token`,
+  `accessToken`, `refreshToken`, `Bearer ...`, and `sha256=...` to `[REDACTED]`. Automated proof in `WarehouseSecurityTest.metricsNeedAnAdmin`
+  and `ObservabilityAndRedactionTest` (4 tests, 0 failures). Guidebook 40.
+- **Unit 10.2 (OpenTelemetry / Jaeger distributed tracing lab, Topic 50)**: `VERIFIED` 2026-11-04.
+  Zero-dependency `ZipkinSpanExporterConfig` added to `api-gateway`, `catalog-service`, and `warehouse-service`
+  (`@ConditionalOnProperty(name = "stockflow.tracing.zipkin-endpoint")`), exporting finished OpenTelemetry `SpanData` over HTTP/1.1
+  (`HttpClient.Version.HTTP_1_1`) in Zipkin v2 JSON format with sensitive attributes redacted. `compose.labs.yaml` adds `jaeger`
+  (`jaegertracing/all-in-one:1.62.0`, `COLLECTOR_ZIPKIN_HOST_PORT: ":9411"`, `--profile observability`) and sets
+  `STOCKFLOW_TRACING_ZIPKIN_ENDPOINT` across `gateway`, `catalog`, `catalog-2`, and `warehouse`.
+  - Automated Testcontainers proof: `JaegerTracingExportTest` (2 tests, 0 failures) starts `jaegertracing/all-in-one:1.62.0`, exports an
+    `api-gateway` span and triggers a `warehouse-service` HTTP request with `traceparent: 00-<traceId>-<gatewaySpanId>-01` and
+    `X-Request-Id`, then queries Jaeger's HTTP API (`GET /api/traces/<traceId>`) to assert both `"api-gateway"` and
+    `"warehouse-service"` spans are present under the shared `<traceId>` with `[REDACTED]` authorization tag.
+  - Live Compose proof (`bash labs/observability/tracing-lab.sh`, two consecutive runs against the running stack):
+    - Run 1: `traceId=0f80f96806dbb370133261dd1d8a89e2`, `requestId=req-trace-lab-1793779328`, `gateway HTTP status = HTTP/1.1 200 OK`,
+      `Jaeger services = "serviceName":"api-gateway" "serviceName":"warehouse-service"`, `Jaeger spans = 20`, warehouse log:
+      `event=http_request service=warehouse-service requestId=req-trace-lab-1793779328 traceId=0f80f96806dbb370133261dd1d8a89e2 spanId=83537ed5551fb3ef method=GET path=/api/v1/warehouses query=password=[REDACTED] status=200 durationMs=59 headers={..., authorization=[REDACTED], ...}`.
+    - Run 2: `traceId=4505fdcf131225103e55d0bf0018ab11`, `requestId=req-trace-lab-1793779336`, `gateway HTTP status = HTTP/1.1 200 OK`,
+      `Jaeger services = "serviceName":"api-gateway" "serviceName":"warehouse-service"`, `Jaeger spans = 28`, warehouse log:
+      `event=http_request service=warehouse-service requestId=req-trace-lab-1793779336 traceId=4505fdcf131225103e55d0bf0018ab11 spanId=917e5b2513f46533 method=GET path=/api/v1/warehouses query=password=[REDACTED] status=200 durationMs=29 headers={..., authorization=[REDACTED], ...}`.
+- **Unit 10.3 (50-topic index, README honesty audit, full 4-service verification & release checklist)**: `VERIFIED` 2026-11-04.
+  Updated `ROADMAP.md` Section 6 (all 50 topics using exact names, marked `VERIFIED`, linked to `guidebooks/01..40`, test classes, and
+  `docs/STATUS.md`), `README.md` (status summary for Phases 0-10 plus explicit separation of core service features, opt-in Compose
+  profiles, and isolated test-tree labs), and `guidebooks/40-observability-and-jaeger-tracing.md`.
+
+## Phase 10 gate review & release checklist (2026-11-04)
+
+Full Maven verification across all four services (`./mvnw.cmd --batch-mode clean verify`):
+- `apps/discovery-server`: `BUILD SUCCESS` — 1 test, 0 failures, 0 errors, 0 skipped.
+- `apps/api-gateway`: `BUILD SUCCESS` — 68 tests, 0 failures, 0 errors, 0 skipped.
+- `apps/catalog-service`: `BUILD SUCCESS` — 74 tests, 0 failures, 0 errors, 0 skipped.
+- `apps/warehouse-service`: `BUILD SUCCESS` — 161 tests, 0 failures, 0 errors, 0 skipped.
+- Total automated tests across the repository: **304 tests, 0 failures**.
+
+Compose validation:
+- `docker compose -f compose.yaml config --quiet` -> exit 0.
+- `docker compose -f compose.yaml -f compose.labs.yaml --profile observability --profile messaging --profile replica --profile eviction config --quiet` -> exit 0.
+
+Phase 10 acceptance criteria:
+- A request can be followed across gateway and downstream service using trace context: `VERIFIED` (`TracingGatewayTest`,
+  `ObservabilityAndRedactionTest`, `JaegerTracingExportTest`, and live `labs/observability/tracing-lab.sh` showing shared `traceId`
+  across `api-gateway` and `warehouse-service` in Jaeger and in container logs).
+- Sensitive values are redacted: `VERIFIED` (`SensitiveDataRedactor` + `ObservabilityAndRedactionTest` + live `tracing-lab.sh`
+  confirming `authorization=[REDACTED]`, `password=[REDACTED]`, `X-Webhook-Signature=[REDACTED]`, and JSON secrets redacted).
+- All 50 topics have one of `PLANNED`, `IMPLEMENTED - NOT VERIFIED`, `VERIFIED`, or `DEFERRED`: `VERIFIED` (all 50 topics in
+  `ROADMAP.md` Section 6 have `VERIFIED` with exact topic names and links to `guidebooks/01..40` and test/lab evidence).
+- `README.md` states exactly what is implemented and what is not: `VERIFIED` (`README.md` distinguishes core service features from
+  opt-in Compose profiles and isolated test-tree labs).
+- Clean-clone setup succeeds in the documented environment: `VERIFIED` (`cp .env.example .env`, `docker compose up --build -d`,
+  all core and lab containers build and pass health checks).
+- All verified claims have evidence: `VERIFIED` (recorded in `docs/STATUS.md` and `docs/evidence/`).

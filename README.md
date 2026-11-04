@@ -61,8 +61,40 @@ Key documents:
 - Phase 8 - Resilience and traffic labs: VERIFIED on 2026-11-04 (gate closed; idempotency keys, retry with backoff and jitter,
   liveness and readiness, graceful shutdown, a scale lab with resource limits, reverse proxy behavior; warehouse 128, catalog 74,
   gateway 68 tests, CI run 41781129839 green). Open items are in [docs/STATUS.md](docs/STATUS.md).
-- Phases 9-10: NOT STARTED. Messaging and observability
-  labs follow the ROADMAP order.
+- Phase 9 - Messaging and distributed-system labs: VERIFIED on 2026-11-04 (gate closed; transactional outbox
+  `stock_outbox` + `FOR UPDATE SKIP LOCKED` worker + idempotent `stock_inbox`, RabbitMQ queue/DLQ routing under
+  `--profile messaging`, HMAC-SHA256 raw-body webhook verification + retry lab, and isolated test-tree labs for
+  Saga orchestration, CQRS projection convergence, event-sourced stock ledger, and bounded-queue backpressure;
+  warehouse 154 tests, live `labs/messaging/dlq-lab.sh` and `labs/messaging/webhook-lab.sh`). Open items are in
+  [docs/STATUS.md](docs/STATUS.md).
+- Phase 10 - Observability, docs and release: VERIFIED on 2026-11-04 (gate closed; admin-gated `/actuator/metrics`
+  in `compose.labs.yaml`, structured correlation logging with `X-Request-Id`/`traceId`/`spanId` and
+  `SensitiveDataRedactor`, zero-dependency Zipkin v2 span export to Jaeger under `--profile observability`,
+  all 50 topics in [ROADMAP.md](ROADMAP.md) Section 6 linked to `guidebooks/01..40` and test/lab evidence;
+  warehouse 158, catalog 74, gateway 68, discovery 1 tests passing).
+
+## What is core vs isolated lab
+
+- **Core service code** (`apps/api-gateway`, `apps/catalog-service`, `apps/warehouse-service`, `apps/discovery-server`):
+  Eureka discovery, dynamic routing, JWT auth & RBAC, Redis rate limiting, circuit breaker & timeout/GET-retry,
+  request ID & W3C trace propagation, RFC 7807 `problem+json` errors, API versioning, product cache-aside with
+  post-commit invalidation & single-flight stampede protection, pessimistic/optimistic stock locking, bounded
+  HikariCP pool, Flyway migrations V1-V8, idempotency keys (`Idempotency-Key`), transactional outbox (`stock_outbox`)
+  & idempotent inbox (`stock_inbox`), HMAC-SHA256 webhook verification (`POST /api/v1/webhooks/carrier-events`),
+  distinct liveness/readiness probes, graceful shutdown, structured correlation logs with secret redaction, and
+  optional Zipkin v2 span export (`stockflow.tracing.zipkin-endpoint`).
+- **Opt-in Compose overrides & profiles** (`compose.labs.yaml`, `compose.scale.yaml`, `compose.hostdev.yaml`):
+  - `compose.labs.yaml` default services: adds a second `catalog-2` instance and enables `health,info,metrics` (admin-only).
+  - `--profile eviction`: starts `redis-lab` (memory-capped Redis for eviction experiments, `labs/caching/eviction-lab.sh`).
+  - `--profile replica`: starts `pg-primary` and `pg-replica` (streaming replication lag lab, `labs/database/replica-lab.sh`).
+  - `--profile messaging`: starts `rabbitmq` (`rabbitmq:3.13.7-management-alpine` for queue/DLQ lab, `labs/messaging/dlq-lab.sh`).
+  - `--profile observability`: starts `jaeger` (`jaegertracing/all-in-one:1.62.0` for distributed tracing lab, `labs/observability/tracing-lab.sh`).
+  - `compose.scale.yaml`: multi-instance CPU/memory-capped scale lab (`labs/resilience/scale-lab.sh`).
+- **Isolated educational labs in test trees** (intentionally not wired as the primary persistence/runtime model):
+  database sharding (`ShardingRoutingLabTest`), table partitioning on archive table (`PartitionPruningLabTest`),
+  client-side `BackoffPolicy`/`RetryingCaller`, Saga coordinator (`SagaTest`), CQRS read-model projection
+  (`CqrsProjectionTest`), event-sourced stock ledger (`EventSourcedStockLedgerTest`), and bounded-executor
+  backpressure (`BackpressureTest`).
 
 ## Prerequisites
 
