@@ -1,0 +1,48 @@
+# Scale lab override (unit 8.6). Use together with the core and the labs file:
+#   docker compose -f compose.yaml -f compose.labs.yaml -f compose.scale.yaml up -d catalog
+# It puts a CPU and a memory limit on every catalog instance and adds a third instance, so that more instances and bigger
+# instances can be compared with the same load (labs/scale/scale-lab.sh). Not part of the normal stack: the limits make
+# the services slower on purpose.
+#   LAB_SCALE_CPUS    CPU limit of each instance (default 0.5)
+#   LAB_SCALE_MEMORY  memory limit of each instance (default 640m; the JVM heap is 65 percent of it)
+services:
+  catalog:
+    cpus: ${LAB_SCALE_CPUS:-0.5}
+    mem_limit: ${LAB_SCALE_MEMORY:-640m}
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65"
+
+  catalog-2:
+    cpus: ${LAB_SCALE_CPUS:-0.5}
+    mem_limit: ${LAB_SCALE_MEMORY:-640m}
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65"
+
+  catalog-3:
+    build: ./apps/catalog-service
+    image: stockflow/catalog-service:0.0.1-SNAPSHOT
+    cpus: ${LAB_SCALE_CPUS:-0.5}
+    mem_limit: ${LAB_SCALE_MEMORY:-640m}
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/catalogdb
+      CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?set CATALOG_DB_PASSWORD in .env}
+      STOCKFLOW_SECURITY_JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
+      SPRING_DATA_REDIS_HOST: redis
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      discovery:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q http://localhost:8081/actuator/health/readiness -O /dev/null"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+      start_period: 60s
+    networks:
+      - stockflow
+    stop_grace_period: 30s
+    restart: unless-stopped

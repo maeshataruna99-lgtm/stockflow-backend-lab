@@ -49,6 +49,20 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(IdempotencyKeyReuseException.class)
+    ProblemDetail handleIdempotencyKeyReuse(IdempotencyKeyReuseException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage());
+        problem.setTitle("Idempotency key reused");
+        return problem;
+    }
+
+    @ExceptionHandler(InvalidIdempotencyKeyException.class)
+    ProblemDetail handleInvalidIdempotencyKey(InvalidIdempotencyKeyException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problem.setTitle("Validation failed");
+        return problem;
+    }
+
     @ExceptionHandler(ConcurrentUpdateException.class)
     ProblemDetail handleConcurrentUpdate(ConcurrentUpdateException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());

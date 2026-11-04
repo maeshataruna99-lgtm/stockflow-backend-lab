@@ -1746,3 +1746,153 @@ Open items and carried notes:
    `LAB-*`, `MIG-*`, `AUTH-*`, `LIVE-WH`, stock rows).
 
 Phase 7 overall: `VERIFIED`, gate closed, with the open items above.
+
+## Phase 8 progress log
+
+Scope decided by the user: do every Phase 8 point first, verify only after all sub-points are done. So the units below
+are `DONE` with their evidence, and Phase 8 stays `IN PROGRESS` until the gate review with CI. Branch
+`feat/phase8-resilience-labs`. No new dependency in any unit. Circuit breaker, rate limiting and load balancing were
+verified in Phase 5 (units 5.3, 5.4, 5.5) and are not rebuilt (unit 8.3 is only the map in guidebook 31 that ties them to the Phase 8 criteria).
+
+- 2026-11-04: unit 8.1 (idempotency keys) `DONE`. warehouse-service Flyway V7 `idempotency_keys`;
+  `IdempotencyService` claims the key with `INSERT ... ON CONFLICT DO NOTHING` in the same transaction as the write and stores
+  the response; `POST /api/v1/stock/{id}/withdraw` and `/transfer` accept an optional `Idempotency-Key` (8 to 80 characters,
+  otherwise 400). Same key and request again: stored response with `Idempotent-Replayed: true`; another request, operation or
+  caller: 422 "Idempotency key reused"; a failed write leaves no key; keys purged after 24 h by an hourly job. `IdempotencyKeyTest`
+  9 tests (written before the code, red by compile error), among them 20 simultaneous requests with one key: 1 executed and
+  19 replayed, stock 7. Live (`labs/resilience/idempotency-lab.sh`, 2 runs): same key three times 200 200 200, stock 7; 20
+  simultaneous with one key all 200, stock 7; same key with quantity 4: 422, stock 7; no key twice: stock 4.
+- 2026-11-04: unit 8.2 (retry, exponential backoff, jitter) `DONE`. The gateway retry filter (unit 5.6) supports a jitter factor
+  that the routes did not set; `stockflow.gateway.retry.jitter` (default 0.5) is now passed to it. `RetryJitterGatewayTest` and
+  `RetryWithoutJitterGatewayTest` read the gaps between attempts from the WireMock journal (backoff 200 ms): with 0.5 the first
+  waits were 219 to 317 ms and the second 233 to 625 ms over two runs, with 0 the first waits 209 to 239 ms and the second 408 to
+  424 ms. Before the property was wired, the 0.5 test showed constant waits (208 to 222 ms): the setting was silently ignored (the
+  red state). The library clamps a jittered wait between the first and the maximum backoff, so the bounds are 200..300 and
+  200..600, not 100..300 as I first assumed; a cold first request waited 419 and 438 ms and is excluded by a warm-up request.
+  Client side, lab code in the warehouse test tree: `BackoffPolicy` (exponential, cap, jitter NONE/FULL/EQUAL, injected random)
+  and `RetryingCaller` (bounded attempts, eligible failure classes); `BackoffPolicyTest` 5 tests (full jitter mean 200.3 ms over
+  10,000 draws for raw 400 ms), `ThunderingHerdSimulationTest` 2 tests on a simulated clock (1,000 clients, peak retries in one
+  bucket: base 1 s, 100 ms buckets: 1000 / 217 / 150 without / equal / full jitter; base 100 ms, 50 ms buckets: 1000 / 1000 /
+  705, my first expectation of a large drop was wrong because the window is two buckets wide), `SafeRetryTest` 3 tests (a lost
+  response retried with a key: stock 7, without a key: stock 4).
+- 2026-11-04: unit 8.4 (liveness and readiness) `DONE`. `management.endpoint.health.probes.enabled` in all four services; liveness
+  is `livenessState`, readiness is `readinessState` plus `db` for catalog and warehouse (Redis stays out). The gateway's JWT filter
+  exempted only the exact path `/actuator/health`; it now exempts `/actuator/health/**`. Compose health checks call the readiness
+  endpoint. Tests: `HealthProbesTest` (warehouse 2 tests: groups, probes open) and `DatabaseOutageHealthTest` (warehouse, a container of its
+  own is stopped: readiness 503 after 1618 ms, liveness 200; catalog 2 tests), `ProbeConfigTest` (warehouse, catalog, reads the real yml),
+  `HealthProbesGatewayTest`. Live (`labs/resilience/probes-lab.sh`, 1 run): database up 200/200; frozen: liveness 200 and readiness
+  503 for warehouse and catalog; unfrozen 200/200. All four services healthy with the readiness check. The Eureka registry is not
+  tied to readiness (not changed, not tested).
+- 2026-11-04: unit 8.5 (graceful shutdown) `DONE`. `server.shutdown: graceful`, `spring.lifecycle.timeout-per-shutdown-phase: 20s`
+  in the four services, `stop_grace_period: 30s` in compose. `GracefulShutdownTest` (warehouse, a second instance started in the
+  JVM, a 3 s request in flight over real HTTP, then the context is closed): graceful: 200 after 3073 and 3064 ms, close took 2355
+  and 2412 ms, a new request refused, readiness events CORRECT, ACCEPTING_TRAFFIC, REFUSING_TRAFFIC; immediate: the client got a
+  `SocketException` (no response) after 3634 and 3386 ms. My first assertion for the immediate mode (the close is fast) was wrong:
+  the close also waited 2.7 to 2.9 s for the thread inside the JDBC call; the assertion now is the failure seen by the client.
+  The yml assertion was added in the same file and ran green at once (the config edit landed before the run), so it was not seen
+  red. Live (`labs/resilience/shutdown-lab.sh`, 2 runs, 10 requests of 6 s in flight, the container stopped 1.5 s later):
+  `docker stop` 10 of 10 answered 200, stopped after 9 s; `docker kill` 0 of 10.
+- 2026-11-04: unit 8.6 (horizontal and vertical scaling, resource limits) `DONE`. `compose.scale.yaml` puts a CPU limit (0.5) and a
+  memory limit (640m, heap 65 percent) on every catalog instance and adds `catalog-3`; `labs/scale/scale-lab.sh` compares 1, 2, 3
+  instances of 0.5 CPU and one instance of 1.5 CPU with 24 workers for 20 s (8 CPU Docker host). Requests per second (run 1 complete
+  / run 2 stopped after B / run 3 complete): A 17 / 18 / 37, B 42 / 33 / 32, C 47 / - / 59, D 47 / - / 62; no errors. Every 0.5
+  CPU instance sat at 46 to 60 percent of one CPU, the 1.5 CPU instance at 147 to 155 percent, memory 335 to 382 MiB of 640 MiB,
+  limits confirmed with `docker inspect`. Supported: instances are CPU bound; three small instances and one bigger instance with
+  the same total CPU gave the same throughput within noise; the 1.5 CPU scenarios beat the 0.5 CPU one in both complete runs.
+  Not supported: linear scaling, the order of A and B (noise was up to 2x between runs for A). Guidebook 30.
+- 2026-11-04: unit 8.7 (reverse proxy) `DONE`. Findings: Spring Cloud Gateway drops the `Forwarded` and `X-Forwarded-*` headers a
+  client sends and adds none (the `XForwardedHeadersFilter` bean exists only when `trusted-proxies` is set, read from the class
+  files), so the services could not tell who the client was; setting `trusted-proxies: "^$"` made it worse (a forged
+  `X-Forwarded-Host` and `X-Forwarded-Proto` reached the service) and was reverted. New `ClientAddressFilter` (global filter)
+  sets `X-Client-Ip` from the TCP peer and removes the client's value; `ClientAddressFilterTest` 2 tests. `ReverseProxyGatewayTest`
+  4 tests over a real HTTP client (service sees `X-Client-Ip: 127.0.0.1`, own Host, path and query; forged address headers
+  dropped; forged `X-User-Id`/`X-User-Roles` replaced from the token; `Proxy-Authorization`, `Keep-Alive`, `TE`, `Upgrade` not
+  passed). Finding about the test setup: `WebTestClient` in the existing gateway tests runs in mock mode (request class
+  `MockServerHttpRequest`, no client address), so it cannot test network behavior. A first hop-by-hop request with four headers
+  (including `Upgrade: websocket`) got 503, not investigated; each header alone with `Upgrade: h2c` got 200.
+- Test totals of the branch (local `clean verify`, run after the code changes of 8.1 to 8.7): api-gateway 68, catalog-service 74,
+  warehouse-service 128, discovery-server 1, 0 failures. CI has not run on this branch. Guidebooks 26 to 32.
+- Process notes: two of my background wait loops were wrong (one waited for a count of BUILD lines that never matched, one never
+  ended) and were stopped by hand; the application was closed once during the second scale run, which is why that run is partial.
+
+Open items and limits of Phase 8 so far: the Eureka registry is not connected to readiness; no `Retry-After` handling; the client
+retry code is lab code, not used by a service; the idempotency table is purged hourly but the retention is not tested over time;
+scale numbers are noisy single-machine runs; the gateway 503 after a downstream restart (Phase 5/7 open item) was not re-tested
+in this phase and is still not fixed; `stop_grace_period` was only exercised on the warehouse.
+- 2026-11-04: CI finding on PR 6. The first CI run of `feat/phase8-resilience-labs` hung in `warehouse-service` for 44 minutes: the
+  log (read after cancelling the run) shows `HealthProbesTest` started at 04:55:28Z and never finished. Cause: its test that froze the
+  shared PostgreSQL container with `docker pause` (passed on the Windows Docker host in 2.5 s) waits without an end on Linux. The other
+  three jobs were green (gateway, catalog, discovery). Fix: that test was removed and replaced by `DatabaseOutageHealthTest` with its
+  own container that is stopped (connection refused); the frozen database remains shown by `labs/resilience/probes-lab.sh`. The
+  GitHub job timeout is 6 hours and the build has no per-test timeout, so a hang costs hours; a surefire fork timeout was not added
+  (build config is outside this task). The run was cancelled by me, which does not count as a CI result.
+
+## Phase 8 gate review (2026-11-04, closing Phase 8)
+
+Verification was done after all sub-points were implemented, as requested. CI evidence for the whole Phase 8 branch: GitHub Actions
+run 41781129839 (pull_request event, PR 6) on commit `b0a2f7a`, matched to the PR head sha before use, concluded success with 4 of 4
+matrix jobs passing (warehouse-service 128 tests, catalog-service 74, api-gateway 68, discovery-server 1; 0 failures). An earlier run
+on `3d1633d` was cancelled by me after `warehouse-service` hung for 44 minutes (see the CI finding above); it is not counted. The same
+commits gave the same totals locally.
+
+| Unit | Topic | Guidebook | Evidence in the code |
+|---|---|---|---|
+| 8.1 | Idempotency keys | 28 | `IdempotencyKeyTest`, `labs/resilience/idempotency-lab.sh` |
+| 8.2 | Retry, backoff, jitter | 29 | `RetryJitterGatewayTest`, `RetryWithoutJitterGatewayTest`, `BackoffPolicyTest`, `ThunderingHerdSimulationTest`, `SafeRetryTest` |
+| 8.3 | Circuit breaker, rate limiting, load balancing (Phase 5 units 5.3 to 5.5) | 31 | map only; evidence of Phase 5 |
+| 8.4 | Liveness and readiness | 26 | `HealthProbesTest`, `DatabaseOutageHealthTest`, `ProbeConfigTest`, `HealthProbesGatewayTest`, `labs/resilience/probes-lab.sh` |
+| 8.5 | Graceful shutdown | 27 | `GracefulShutdownTest`, `labs/resilience/shutdown-lab.sh` |
+| 8.6 | Horizontal and vertical scaling | 30 | `compose.scale.yaml`, `labs/scale/scale-lab.sh` |
+| 8.7 | Reverse proxy | 32 | `ReverseProxyGatewayTest`, `ClientAddressFilterTest` |
+
+Acceptance criteria:
+
+- Retry count and eligible failure classes are bounded: `VERIFIED`. Gateway: 2 extra attempts, `GET` only, 502/503/504 and timeouts
+  (`RetryTimeoutGatewayTest`, unit 5.6, which still passes: a failing GET is sent 3 times, a POST once). Client policy: `BackoffPolicyTest`
+  (an always-failing action is called exactly `maxAttempts` times, a non-eligible exception once).
+- Jitter is testable or observable: `VERIFIED`. Observed on the gateway through the WireMock journal in two runs (219 to 317 ms and 233
+  to 625 ms with 0.5, 209 to 239 ms and 408 to 424 ms with 0) and tested with a seeded random source in the client policy; the setting was
+  silently ignored before it was wired, which the test caught.
+- Idempotency keys reject reuse with a different request payload: `VERIFIED` (`IdempotencyKeyTest.differentPayloadIsRefused`, 422, stock
+  unchanged; also another stock row, operation or caller; live 422 with the stock at 7).
+- Scale lab runs multiple instances and documents resource limits: `VERIFIED` for the lab and the limits (1, 2 and 3 instances at 0.5 CPU and
+  640 MiB, one at 1.5 CPU; limits shown by `docker inspect`, use by `docker stats`). The conclusions that the data supports are narrow and
+  stated in guidebook 30 (CPU bound, three small about equal to one big, large run-to-run noise); linear scaling is not claimed.
+- Graceful shutdown has a reproducible in-flight request and termination test: `VERIFIED` (`GracefulShutdownTest` in one JVM, two runs; live
+  `docker stop` 10 of 10 answered against `docker kill` 0 of 10, two runs).
+- Liveness and readiness are distinct and accurately configured: `VERIFIED` (separate groups, only readiness has the database; with the
+  database gone readiness 503 and liveness 200 in a test with its own container; live with a frozen database 503 and 200, then recovery;
+  probes open without a token in all services; compose health checks use readiness). The test that froze the shared container hung on CI and
+  was replaced.
+
+Topics of the phase that belong to other units: circuit breaker, rate limiting and load balancing are Phase 5 units `VERIFIED` with CI; the
+reverse proxy topic is unit 8.7.
+
+Open items and carried notes:
+
+1. The Eureka registry is not tied to readiness: a service that reports readiness DOWN stays UP in Eureka and keeps receiving routed traffic.
+2. The gateway answering 503 for about a minute after a downstream service restart (seen in Phases 5 and 7) was not re-tested in this phase
+   and is not fixed.
+3. The client retry code (`BackoffPolicy`, `RetryingCaller`) is lab code in the test tree; no service uses it. `Retry-After` is not honored.
+4. The idempotency purge job runs hourly; neither the schedule nor the retention was tested over time. Only successful responses are stored.
+5. Graceful shutdown behavior was tested on the warehouse (servlet, Tomcat); the catalog, gateway (reactive, Netty) and discovery have the
+   same configuration, checked in the file but not exercised with an in-flight request. `stop_grace_period` is set for all, exercised for the
+   warehouse.
+6. The gateway tests that use `WebTestClient` run in mock mode (no TCP, no client address); they do not exercise network behavior. Found in
+   unit 8.7; the new reverse proxy test uses a real HTTP client. Earlier gateway tests were not changed.
+7. A combined request with `Upgrade: websocket` through the gateway answered 503; not investigated.
+8. The build has no per-test or fork timeout: one hung test held a CI job for 44 minutes until cancelled, and GitHub's job limit is 6 hours.
+9. Scale numbers are noisy single-machine runs (one scenario varied 2x between runs; one of three runs was interrupted).
+10. Carried from earlier phases: Spring Boot 3.5 and Spring Cloud 2025.0 past OSS support; core Redis without `maxmemory`; one shared HS256
+    secret in three services; catalog and other services still on the HikariCP defaults (30 s wait); lab endpoints shipped behind
+    `stockflow.lab.unsafe-stock`; demo rows left in the compose databases.
+
+Phase 8 overall: `VERIFIED`, gate closed, with the open items above.
+- 2026-11-04: second CI finding on PR 6. The docs-only run 41781475060 on `aef97f7` failed in `warehouse-service`:
+  `ReplicationLagTest` (unit 7.10, not touched by Phase 8) got SQLSTATE 42P01 (table does not exist) on the replica where it
+  expected 25006, and two more tests failed on the same missing table. Cause: the test creates `lab_lag` on the primary and uses it on
+  the replica at once; the table reaches the replica through replication, so a test that ran first could find it missing. A race in my
+  test setup that earlier CI runs did not hit by chance. Fix: the setup waits (Awaitility, up to 15 s) until the table exists on the
+  replica. It could not be reproduced locally; the test passes locally before and after. The gate evidence above (run 41781129839 on
+  `b0a2f7a`) was green and is unchanged; the PR head moved on by docs and this test fix, and the next run on the final head is the
+  one to read before merging.

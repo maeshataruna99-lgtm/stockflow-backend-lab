@@ -35,3 +35,13 @@ spring.reactor.context-propagation: auto
 # (RedisRateLimiter fails open): an outage costs the rate limit, not availability.
 spring.data.redis.timeout: 300ms
 spring.data.redis.connect-timeout: 300ms
+
+# Liveness says the process is alive and not wedged; readiness says traffic may be sent here (guidebook 26).
+management.endpoint.health.probes.enabled: true
+management.endpoint.health.group.liveness.include: livenessState
+management.endpoint.health.group.readiness.include: readinessState
+
+# Graceful shutdown: on SIGTERM stop taking new connections, let requests in flight finish for up to 20 s (guidebook 27).
+# The container stop_grace_period in compose.yaml is longer than this.
+server.shutdown: graceful
+spring.lifecycle.timeout-per-shutdown-phase: 20s

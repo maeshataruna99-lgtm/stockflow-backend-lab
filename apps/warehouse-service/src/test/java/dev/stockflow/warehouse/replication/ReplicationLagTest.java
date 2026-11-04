@@ -72,6 +72,10 @@ class ReplicationLagTest {
         primary = connect(primaryContainer.getHost(), primaryContainer.getMappedPort(5432));
         replica = connect(replicaContainer.getHost(), replicaContainer.getMappedPort(5432));
         primary.execute("CREATE TABLE lab_lag (id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, marker TEXT NOT NULL)");
+        // the table reaches the replica through replication too: a test that runs first must not see it missing (SQLSTATE 42P01
+        // instead of the 25006 it expects; this happened on a CI run)
+        await().atMost(Duration.ofSeconds(15)).pollInterval(Duration.ofMillis(5)).until(() ->
+                Boolean.TRUE.equals(replica.queryForObject("SELECT to_regclass('lab_lag') IS NOT NULL", Boolean.class)));
     }
 
     @AfterAll

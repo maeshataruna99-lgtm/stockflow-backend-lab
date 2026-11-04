@@ -29,3 +29,8 @@ stockflow:
 # test fixtures for DemoAuthController, which has no defaults
 ROOT_PASSWORD: root_demo_password_123
 DEMO_USER_PASSWORD: user_demo_password_123
+
+# Liveness says the process is alive and not wedged; readiness says traffic may be sent here (guidebook 26).
+management.endpoint.health.probes.enabled: true
+management.endpoint.health.group.liveness.include: livenessState
+management.endpoint.health.group.readiness.include: readinessState
