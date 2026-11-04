@@ -1888,3 +1888,11 @@ Open items and carried notes:
     `stockflow.lab.unsafe-stock`; demo rows left in the compose databases.
 
 Phase 8 overall: `VERIFIED`, gate closed, with the open items above.
+- 2026-11-04: second CI finding on PR 6. The docs-only run 41781475060 on `aef97f7` failed in `warehouse-service`:
+  `ReplicationLagTest` (unit 7.10, not touched by Phase 8) got SQLSTATE 42P01 (table does not exist) on the replica where it
+  expected 25006, and two more tests failed on the same missing table. Cause: the test creates `lab_lag` on the primary and uses it on
+  the replica at once; the table reaches the replica through replication, so a test that ran first could find it missing. A race in my
+  test setup that earlier CI runs did not hit by chance. Fix: the setup waits (Awaitility, up to 15 s) until the table exists on the
+  replica. It could not be reproduced locally; the test passes locally before and after. The gate evidence above (run 41781129839 on
+  `b0a2f7a`) was green and is unchanged; the PR head moved on by docs and this test fix, and the next run on the final head is the
+  one to read before merging.
