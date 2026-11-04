@@ -27,7 +27,7 @@ import org.springframework.security.web.access.AccessDeniedHandler;
 
 /**
  * The service checks the gateway's JWT itself (ADR 0007): reads need ROLE_USER or ROLE_ADMIN, writes need
- * ROLE_ADMIN, same rule as the gateway. Only health, info and the API documents are open.
+ * ROLE_ADMIN, same rule as the gateway. Only health, info, API documents and HMAC-signed webhooks are open.
  */
 @Configuration
 @EnableConfigurationProperties(JwtProperties.class)
@@ -46,7 +46,7 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(a -> a
                         .requestMatchers("/actuator/health/**", "/actuator/info", "/v3/api-docs/**",
-                                "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                                "/swagger-ui/**", "/swagger-ui.html", "/api/v1/webhooks/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/**").hasAnyRole("USER", "ADMIN")
                         .requestMatchers("/api/v1/**").hasRole("ADMIN")
                         .anyRequest().denyAll())

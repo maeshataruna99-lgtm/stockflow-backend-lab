@@ -29,16 +29,18 @@ public class StockService {
     private final MeterRegistry meters;
     private final JdbcTemplate jdbcTemplate;
     private final TransactionTemplate transaction;
+    private final OutboxService outbox;
 
     StockService(StockLevelRepository stockLevelRepository, StorageLocationRepository storageLocationRepository,
                  StockProperties properties, MeterRegistry meters, JdbcTemplate jdbcTemplate,
-                 PlatformTransactionManager transactionManager) {
+                 PlatformTransactionManager transactionManager, OutboxService outbox) {
         this.stockLevelRepository = stockLevelRepository;
         this.storageLocationRepository = storageLocationRepository;
         this.properties = properties;
         this.meters = meters;
         this.jdbcTemplate = jdbcTemplate;
         this.transaction = new TransactionTemplate(transactionManager);
+        this.outbox = outbox;
     }
 
     @Transactional
@@ -49,8 +51,14 @@ public class StockService {
             throw new DuplicateResourceException("stock for product " + request.productId()
                     + " at location " + request.locationId() + " already exists");
         }
-        return StockLevelResponse.from(stockLevelRepository.saveAndFlush(
+        StockLevelResponse created = StockLevelResponse.from(stockLevelRepository.saveAndFlush(
                 new StockLevel(location, request.productId(), request.quantity())));
+        outbox.record(created.id(), "STOCK_CREATED", Map.of(
+                "stockId", created.id(),
+                "locationId", created.locationId(),
+                "productId", created.productId(),
+                "quantity", created.quantity()));
+        return created;
     }
 
     @Transactional(readOnly = true)
@@ -68,7 +76,28 @@ public class StockService {
             throw new InsufficientStockException("stock " + id + " has " + stock.getQuantity()
                     + " units, " + quantity + " requested");
         }
-        return get(id);
+        StockLevelResponse updated = get(id);
+        outbox.record(id, "STOCK_WITHDRAWN", Map.of(
+                "stockId", id,
+                "withdrawn", quantity,
+                "remaining", updated.quantity()));
+        return updated;
+    }
+
+    @Transactional
+    public StockLevelResponse applyDelta(Long id, int delta) {
+        if (delta < 0) {
+            return withdraw(id, -delta);
+        }
+        if (stockLevelRepository.addQuantity(id, delta) == 0) {
+            throw ResourceNotFoundException.of("stock", id);
+        }
+        StockLevelResponse updated = get(id);
+        outbox.record(id, "STOCK_REPLENISHED", Map.of(
+                "stockId", id,
+                "added", delta,
+                "remaining", updated.quantity()));
+        return updated;
     }
 
     /**
@@ -173,7 +202,12 @@ public class StockService {
         }
         stockLevelRepository.addQuantity(from.getId(), -quantity);
         stockLevelRepository.addQuantity(to.getId(), quantity);
-        return new StockTransferResponse(get(from.getId()), get(to.getId()));
+        StockTransferResponse result = new StockTransferResponse(get(from.getId()), get(to.getId()));
+        outbox.record(fromId, "STOCK_TRANSFERRED", Map.of(
+                "fromId", fromId,
+                "toId", toId,
+                "quantity", quantity));
+        return result;
     }
 
     /** Bounds how long this transaction waits for a row lock (PostgreSQL setting, local to the transaction). */

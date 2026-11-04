@@ -500,6 +500,7 @@ reproducible in-flight request/termination test. - Liveness and
 readiness are distinct and accurately configured.
 
 ### Phase 9 --- Messaging and distributed-system labs
+Status: `VERIFIED` locally 2026-11-04 (CI pending push) - units 9.1 to 9.7 and the gate review in `docs/STATUS.md` (Phase 9 gate review), `warehouse-service` `./mvnw clean verify` 154 tests passing (0 failures) and live labs `labs/messaging/dlq-lab.sh` and `labs/messaging/webhook-lab.sh`. Guidebooks `33-outbox-and-idempotent-consumer.md` to `39-backpressure.md`. Open items: outbox relay invoked on demand (RabbitMQ is opt-in `--profile messaging`), no per-row attempt counter on `stock_outbox`, Saga/CQRS/Event Sourcing are test-tree labs.
 
 Add optional Compose profile/infrastructure for RabbitMQ and workers.
 

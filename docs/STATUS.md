@@ -1896,3 +1896,126 @@ Phase 8 overall: `VERIFIED`, gate closed, with the open items above.
   replica. It could not be reproduced locally; the test passes locally before and after. The gate evidence above (run 41781129839 on
   `b0a2f7a`) was green and is unchanged; the PR head moved on by docs and this test fix, and the next run on the final head is the
   one to read before merging.
+
+
+## Phase 9 progress log
+
+Scope decided by the user: do every Phase 9 point and sub-point together, then verify at the end. Branch
+`feat/phase9-messaging-labs`. No new Maven dependency in any unit (RabbitMQ is exercised through the management HTTP API of
+`rabbitmq:3.13.7-management-alpine` with the JDK `HttpClient` in tests and `rabbitmqadmin` in the live lab script).
+
+- 2026-11-04: unit 9.1 (transactional outbox, background workers, job scheduling, idempotent consumer; topics 37, 38, 39, 44) `DONE`.
+  warehouse-service Flyway V8 creates `stock_outbox` (with partial index `WHERE published_at IS NULL`) and `processed_events`.
+  `StockService.create`, `withdraw`, `applyDelta`, and `transfer` call `OutboxService.record` (`Propagation.MANDATORY`) in the same
+  database transaction as the stock mutation. `OutboxService.relayBatch` claims unpublished rows with `FOR UPDATE SKIP LOCKED`,
+  publishes them, and sets `published_at = now()`; `OutboxService.consumeOnce` claims `event_id` in `processed_events` with
+  `INSERT ... ON CONFLICT DO NOTHING` in the same transaction as the side effect; `OutboxService.purgePublished` (`@Scheduled` hourly)
+  purges published rows older than `stockflow.stock.idempotency-retention`. `OutboxAndWorkerTest` 5 tests: stock write and outbox row
+  commit together (`STOCK_CREATED`, `STOCK_WITHDRAWN`); failed withdrawal (`InsufficientStockException`) leaves no `STOCK_WITHDRAWN`
+  row; 4 concurrent worker threads draining 12 events with `relayBatch(3, ...)` publish each `event_id` once; a simulated relay crash
+  after delivering to the broker re-delivers the same `event_id` on the next poll and `consumeOnce` applies the side effect once;
+  `purgePublishedOlderThan(24h)` deletes only the 2-day-old published row and keeps the 1-hour-old published row and the unpublished row.
+- 2026-11-04: unit 9.2 (message queues and dead-letter queues on RabbitMQ; topics 35, 36) `DONE`. `compose.labs.yaml` adds `rabbitmq`
+  (`rabbitmq:3.13.7-management-alpine`, profile `messaging`, healthcheck `rabbitmq-diagnostics -q ping`). `RabbitMqDlqTest` 3 tests on
+  real `rabbitmq:3.13.7-management-alpine` and `postgres:16.15-alpine` containers:
+  1. duplicate message `evt-dup-1` (`delta: -3`) published twice and `evt-2` (`delta: +5`) once -> consumer applies `evt-dup-1` once
+     and `evt-2` once (`10 - 3 + 5 = 12`), `stock.dlq` empty;
+  2. poison message `evt-poison-99` (`{"stockId":1,"delta":"not-a-number"}`) followed by `evt-valid-after-poison` (`delta: -2`) ->
+     worker retries `evt-poison-99` 3 times (`reject_requeue_true` on attempts 1 and 2, `reject_requeue_false` on attempt 3), RabbitMQ
+     routes `evt-poison-99` through `stock.dlx` to `stock.dlq` with `x-first-death-queue=stock.work` and
+     `x-first-death-reason=rejected`, and `evt-valid-after-poison` is processed (`12 - 2 = 10`);
+  3. queue `stock.bounded` with `x-max-length: 3` and `x-dead-letter-exchange: stock.dlx` fed 5 messages retains the 3 newest
+     (`evt-cap-3..5`) and dead-letters the 2 oldest (`evt-cap-1..2`) to `stock.dlq` with `x-first-death-reason=maxlen`.
+  First run of `RabbitMqDlqTest` failed in `@BeforeAll` with `IOException: EOF reached while reading` because JDK `HttpClient` defaults
+  to HTTP/2 (`Upgrade: h2c`), which RabbitMQ's Cowboy server closes; fixed by setting `HttpClient.Version.HTTP_1_1`. Live
+  (`labs/messaging/dlq-lab.sh`, 2 runs against `stockflow-rabbitmq`): poison message routed to `lab.dlq` (`reason=rejected`) after 3
+  attempts, valid message behind it consumed from `lab.work`, and bounded queue (`x-max-length=3`, 5 published) kept `cap-3..5` and
+  dead-lettered `cap-1..2`. Guidebook 34.
+- 2026-11-04: unit 9.3 (webhook signature verification and webhook retries; topics 40, 41) `DONE`. `POST /api/v1/webhooks/stock-events`
+  (`WebhookController`, `WebhookVerifier`, `WebhookSignatureException`) reads `@RequestBody byte[] rawBody`, verifies
+  `X-Webhook-Timestamp` within `±5m` (`stockflow.stock.webhook-tolerance`), computes `HMAC-SHA256(secret, timestamp + "." + rawBody)`
+  over the exact raw request bytes, compares with `MessageDigest.isEqual` (constant-time), and deduplicates `X-Webhook-Id` via
+  `OutboxService.consumeOnce`. `WebhookVerificationAndRetryTest` 5 tests: valid HMAC over pretty-printed JSON adjusts stock `10 -> 7`;
+  signing compact JSON and sending pretty-printed JSON with the same fields returns 401 (`Invalid webhook signature`); tampered body,
+  wrong secret, and 10-minute-old timestamp all return 401; `RetryingCaller` with `BackoffPolicy` (full jitter) retries 2 transient
+  `IOException`s, delivers on attempt 3 (`10 -> 6`), and a duplicate delivery with the same `X-Webhook-Id` returns 200 with
+  `Webhook-Replayed: true` and leaves stock at 6. Live (`labs/messaging/webhook-lab.sh`, 2 runs): valid HMAC 200 (stock 7), duplicate
+  `X-Webhook-Id` 200 (stock 7), extra spaces in raw body 401 (stock 7), 10-minute-old timestamp 401 (stock 7). Guidebook 35.
+- 2026-11-04: unit 9.4 (distributed transactions and Saga pattern; topic 43) `DONE`. `SagaTest` 3 tests on a real PostgreSQL container
+  with explicit `SagaState` (`STARTED`, `STOCK_RESERVED`, `COMPLETED`, `COMPENSATING`, `COMPENSATED`): happy path reserves 4 of 10
+  units, records payment, and reaches `COMPLETED` (stock 6); declined payment transitions through `COMPENSATING` to `COMPENSATED` and
+  restores stock to 10; simulated crash in `STOCK_RESERVED` (stock at 6) is found by `recoverIncompleteSagas()`, compensated back to 10
+  (`COMPENSATED`), and calling compensation/recovery a second time leaves stock at 10. Guidebook 36.
+- 2026-11-04: unit 9.5 (eventual consistency and CQRS; topics 42, 45) `DONE`. `CqrsProjectionTest` 1 end-to-end test on the shared
+  PostgreSQL container: two stock creates (`10`, `15`) and a withdrawal (`-4`) commit `21` on the write side while the CQRS view
+  `cqrs_product_stock_view` still reads `0` and `isConverged(productId)` (`unpublished == 0 && view.last_outbox_id == max(outbox.id)`)
+  is `false`; after the projector relays and applies the 3 outbox events (measured `42,765 us` in run 1, `30,420 us` in run 2),
+  `isConverged` is `true`, the read model equals `21`, and re-applying the events is a no-op. Guidebook 37.
+- 2026-11-04: unit 9.6 (event sourcing; topic 46) `DONE`. Isolated educational lab in `EventSourcedStockLedgerTest` (3 tests on a real
+  PostgreSQL container, not the service's primary persistence model): replaying `es_stock_events` reconstructs balances at v1 (`20`),
+  v2 (`30`), v3 (`23`), and v4 (`21`) and rejects an overdraft at v4; two concurrent appends at expected version 4 collide on
+  `UNIQUE (stream_id, version)` with SQLSTATE `23505`; replaying from a v5 snapshot plus 3 tail events (v6..v8) reads 3 rows instead of
+  8 and produces the same balance (`29`). Guidebook 38.
+- 2026-11-04: unit 9.7 (backpressure and bounded queues; topic 47) `DONE`. `BackpressureTest` 3 tests (2 workers, bounded queue):
+  `CallerRunsPolicy` (queue capacity 4, 30 tasks of 15 ms) completes all 30 tasks with 0 dropped, runs 8 (run 1) and 9 (run 2) tasks on
+  the producer thread, and never exceeds queue depth 4; `AbortPolicy` (queue capacity 5, 20 tasks while workers are held) accepts
+  `2 + 5 = 7` and rejects 13 with `RejectedExecutionException`; `Semaphore(3)` admits 3 of 10 concurrent arrivals and sheds 7. Combined
+  with the RabbitMQ `x-max-length: 3` test in `RabbitMqDlqTest` and `labs/messaging/dlq-lab.sh`. Guidebook 39.
+
+## Phase 9 gate review (2026-11-04, local verification complete)
+
+Full local verification command in `apps/warehouse-service`: `./mvnw --batch-mode clean verify` -> `BUILD SUCCESS`, 154 tests run, 0
+failures, 0 errors, 0 skipped (up from 128 in Phase 8; +26 tests across the 7 Phase 9 test classes). Compose syntax validated with
+`docker compose -f compose.yaml -f compose.labs.yaml --profile messaging config --quiet` (exit 0). Live labs `labs/messaging/dlq-lab.sh`
+and `labs/messaging/webhook-lab.sh` verified twice against the running Compose containers (`stockflow-rabbitmq` and
+`stockflow-warehouse`).
+
+| Unit | Topic | Guidebook | Evidence in the code |
+|---|---|---|---|
+| 9.1 | Outbox, background workers, job scheduling, EDA, idempotent consumer | 33 | `V8__stock_outbox.sql`, `OutboxService`, `StockService`, `OutboxAndWorkerTest` |
+| 9.2 | Message queues, retries, dead-letter queues | 34 | `compose.labs.yaml` (`rabbitmq`), `RabbitMqDlqTest`, `labs/messaging/dlq-lab.sh` |
+| 9.3 | Webhook signature verification and retries | 35 | `WebhookVerifier`, `WebhookController`, `WebhookVerificationAndRetryTest`, `labs/messaging/webhook-lab.sh` |
+| 9.4 | Distributed transactions and Saga | 36 | `SagaTest` |
+| 9.5 | Eventual consistency and CQRS | 37 | `CqrsProjectionTest` |
+| 9.6 | Event sourcing (isolated lab) | 38 | `EventSourcedStockLedgerTest` |
+| 9.7 | Backpressure and bounded queues | 39 | `BackpressureTest`, `RabbitMqDlqTest`, `labs/messaging/dlq-lab.sh` |
+
+Acceptance criteria:
+
+- Message consumer is idempotent: `VERIFIED` (`OutboxService.consumeOnce` with `INSERT INTO processed_events ... ON CONFLICT DO NOTHING`
+  in the same transaction as the side effect; proven in `OutboxAndWorkerTest`, `RabbitMqDlqTest.duplicateMessagesAreAppliedOnce`, and
+  `WebhookVerificationAndRetryTest`).
+- Retry exhaustion routes poison messages to a DLQ: `VERIFIED` (`RabbitMqDlqTest.poisonMessageExhaustsRetriesAndRoutesToDlq` and
+  `labs/messaging/dlq-lab.sh`: poison message retried 3 times then rejected with `requeue=false`, routed by RabbitMQ through `stock.dlx`
+  to `stock.dlq` with `x-first-death-reason=rejected`, while valid messages behind it are processed).
+- Outbox writes business data and outbox record in one local DB transaction: `VERIFIED` (`OutboxService.record` with
+  `Propagation.MANDATORY` called inside `StockService.create`, `withdraw`, `applyDelta`, and `transfer`; proven by
+  `OutboxAndWorkerTest.stockWriteAndOutboxRecordCommitInOneLocalTransaction` and
+  `failedStockWriteRollsBackWithoutLeavingOutboxRecord`).
+- Outbox publisher handles duplicate delivery: `VERIFIED` (`OutboxAndWorkerTest.duplicateDeliveryFromRelayCrashIsAppliedOnceByIdempotentConsumer`
+  and concurrent `FOR UPDATE SKIP LOCKED` workers in `relayPublishesPendingEventsAndConcurrentWorkersSkipLockedRows`).
+- Saga has explicit states, compensation, and recovery: `VERIFIED` (`SagaTest`: explicit states `STARTED`, `STOCK_RESERVED`,
+  `COMPLETED`, `COMPENSATING`, `COMPENSATED`; payment failure compensates stock `6 -> 10`; crash in `STOCK_RESERVED` is recovered by
+  `recoverIncompleteSagas()` and idempotent on repeat execution).
+- Eventual consistency has a measurable expected convergence condition: `VERIFIED` (`CqrsProjectionTest.isConverged`:
+  `unpublished == 0 && view.last_outbox_id == max(outbox.id)`; `false` during the inconsistency window when view is `0` vs write sum
+  `21`, `true` after projection in `42.8 ms` / `30.4 ms` with view at `21`).
+- Webhook signature verification uses the raw request body and constant-time comparison where applicable: `VERIFIED`
+  (`WebhookVerifier.verify` computes `HMAC-SHA256` over `byte[] rawBody` and compares via `MessageDigest.isEqual`; reformatting JSON
+  whitespace with the same fields returns 401 in `WebhookVerificationAndRetryTest` and `labs/messaging/webhook-lab.sh`).
+- Event sourcing is an isolated educational lab, not falsely claimed as the primary persistence model: `VERIFIED`
+  (`EventSourcedStockLedgerTest` in the test tree on its own `es_stock_events` / `es_stock_snapshots` tables; guidebook 38 states that
+  `stock_levels` remains the service's primary persistence model).
+- Backpressure lab shows bounded queue/consumer behavior under load: `VERIFIED` (`BackpressureTest` for `CallerRunsPolicy`,
+  `AbortPolicy`, and `Semaphore`; `RabbitMqDlqTest` and `labs/messaging/dlq-lab.sh` for broker `x-max-length: 3` with `maxlen`
+  dead-lettering).
+
+Open items and limits of Phase 9:
+1. `OutboxService.relayBatch` is invoked on demand in tests/labs; no background daemon continuously relays `stock_outbox` to RabbitMQ in
+   the default Compose stack because RabbitMQ is an opt-in lab profile (`--profile messaging`).
+2. A poison outbox row whose `EventPublisher` throws every time rolls back its batch; there is no per-row attempt counter on
+   `stock_outbox`.
+3. Saga, CQRS read view, and Event Sourcing live in the test tree as self-containedPostgreSQL labs, not as public HTTP endpoints.
+4. Default webhook secret in `StockProperties` is a lab default (`whsec_stockflow_lab_default_signing_secret_32b`); production deployments
+   must override `STOCKFLOW_STOCK_WEBHOOK_SECRET`.
+5. GitHub Actions CI has not run on `feat/phase9-messaging-labs` yet (branch is local until push/PR is requested).
