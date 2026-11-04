@@ -67,6 +67,7 @@ public class GatewayRoutesConfig {
                         .setMethods(HttpMethod.GET)
                         .setSeries()
                         .setStatuses(HttpStatus.BAD_GATEWAY, HttpStatus.SERVICE_UNAVAILABLE, HttpStatus.GATEWAY_TIMEOUT)
-                        .setBackoff(retry.getFirstBackoff(), retry.getMaxBackoff(), 2, false));
+                        .setBackoff(retry.getFirstBackoff(), retry.getMaxBackoff(), 2, false)
+                        .setJitter(retry.getJitter()));
     }
 }
