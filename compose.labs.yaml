@@ -12,15 +12,20 @@ services:
       STOCKFLOW_CACHE_SINGLE_FLIGHT: ${LAB_SINGLE_FLIGHT:-true}
       # request lines at DEBUG, so the trace id shows up in the log (tracing lab, unit 5.8); env var names are lowercased, so use a package, not a class
       LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB_SERVLET: DEBUG
+      STOCKFLOW_TRACING_ZIPKIN_ENDPOINT: ${LAB_ZIPKIN_ENDPOINT:-http://jaeger:9411/api/v2/spans}
 
   gateway:
     environment:
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics
       LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_CLOUD_GATEWAY_HANDLER: DEBUG
+      STOCKFLOW_TRACING_ZIPKIN_ENDPOINT: ${LAB_ZIPKIN_ENDPOINT:-http://jaeger:9411/api/v2/spans}
 
   # race condition lab (unit 7.1): switches on the deliberately broken withdraw endpoint, never in the core file
   warehouse:
     environment:
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics
       STOCKFLOW_LAB_UNSAFE_STOCK: "true"
+      STOCKFLOW_TRACING_ZIPKIN_ENDPOINT: ${LAB_ZIPKIN_ENDPOINT:-http://jaeger:9411/api/v2/spans}
 
   catalog-2:
     build: ./apps/catalog-service
@@ -32,6 +37,7 @@ services:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
       SPRING_DATA_REDIS_HOST: redis
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics
+      STOCKFLOW_TRACING_ZIPKIN_ENDPOINT: ${LAB_ZIPKIN_ENDPOINT:-http://jaeger:9411/api/v2/spans}
     depends_on:
       postgres:
         condition: service_healthy
@@ -127,5 +133,17 @@ services:
       timeout: 5s
       retries: 15
       start_period: 10s
+    networks:
+      - stockflow
+
+  # Observability lab (Phase 10): Jaeger all-in-one collector and query API on the internal network only (no host ports).
+  # Not started by default: docker compose -f compose.yaml -f compose.labs.yaml --profile observability up -d jaeger
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    container_name: stockflow-jaeger
+    profiles: ["observability"]
+    environment:
+      COLLECTOR_ZIPKIN_HOST_PORT: ":9411"
+    # jaegertracing/all-in-one is a distroless image without a shell; readiness is queried over http://jaeger:16686/api/services
     networks:
       - stockflow
