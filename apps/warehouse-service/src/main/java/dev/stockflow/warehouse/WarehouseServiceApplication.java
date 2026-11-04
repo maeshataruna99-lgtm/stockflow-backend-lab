@@ -3,9 +3,11 @@ package dev.stockflow.warehouse;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.data.web.config.EnableSpringDataWebSupport;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.data.web.config.EnableSpringDataWebSupport.PageSerializationMode;
 
 @SpringBootApplication
+@EnableScheduling // the hourly purge of old idempotency keys
 // Serialize Page responses through the stable spring-data "page" DTO
 // instead of PageImpl (whose direct serialization Boot 3.5 warns is
 // unsupported and can change between releases). Same decision as
