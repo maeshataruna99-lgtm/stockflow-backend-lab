@@ -486,7 +486,7 @@ Sharding and partitioning are isolated experiments, not falsely
 represented as core architecture.
 
 ### Phase 8 --- Resilience and traffic labs
-Status: `IN PROGRESS` - the sub-points are implemented and have evidence in `docs/STATUS.md` (Phase 8 progress log): 8.1 idempotency keys, 8.2 retry with backoff and jitter, 8.3 map of the verified Phase 5 patterns (circuit breaker, rate limiting, load balancing: units 5.3 to 5.5), 8.4 liveness and readiness, 8.5 graceful shutdown, 8.6 scale lab with resource limits, 8.7 reverse proxy; guidebooks 26 to 32. As requested, nothing is marked `VERIFIED` yet: the gate review and CI on the branch come after all sub-points.
+Status: `VERIFIED` 2026-11-04 - units 8.1 to 8.7 and the gate review in `docs/STATUS.md` (Phase 8 gate review), CI run 41781129839 on PR 6 (4 of 4 jobs passing). Guidebooks `26-liveness-and-readiness.md` to `32-reverse-proxy.md`. Circuit breaker, rate limiting and load balancing are the Phase 5 units 5.3 to 5.5 (guidebook 31). Open items: Eureka not tied to readiness, gateway 503 after a downstream restart, client retry code is lab code, no test timeout in the build.
 
 **Topics** - Idempotency, retry, exponential backoff, jitter, circuit
 breakers, rate limiting. - Load balancing, horizontal/vertical scaling,

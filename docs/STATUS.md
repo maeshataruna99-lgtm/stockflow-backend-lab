@@ -1826,3 +1826,65 @@ in this phase and is still not fixed; `stop_grace_period` was only exercised on 
   own container that is stopped (connection refused); the frozen database remains shown by `labs/resilience/probes-lab.sh`. The
   GitHub job timeout is 6 hours and the build has no per-test timeout, so a hang costs hours; a surefire fork timeout was not added
   (build config is outside this task). The run was cancelled by me, which does not count as a CI result.
+
+## Phase 8 gate review (2026-11-04, closing Phase 8)
+
+Verification was done after all sub-points were implemented, as requested. CI evidence for the whole Phase 8 branch: GitHub Actions
+run 41781129839 (pull_request event, PR 6) on commit `b0a2f7a`, matched to the PR head sha before use, concluded success with 4 of 4
+matrix jobs passing (warehouse-service 128 tests, catalog-service 74, api-gateway 68, discovery-server 1; 0 failures). An earlier run
+on `3d1633d` was cancelled by me after `warehouse-service` hung for 44 minutes (see the CI finding above); it is not counted. The same
+commits gave the same totals locally.
+
+| Unit | Topic | Guidebook | Evidence in the code |
+|---|---|---|---|
+| 8.1 | Idempotency keys | 28 | `IdempotencyKeyTest`, `labs/resilience/idempotency-lab.sh` |
+| 8.2 | Retry, backoff, jitter | 29 | `RetryJitterGatewayTest`, `RetryWithoutJitterGatewayTest`, `BackoffPolicyTest`, `ThunderingHerdSimulationTest`, `SafeRetryTest` |
+| 8.3 | Circuit breaker, rate limiting, load balancing (Phase 5 units 5.3 to 5.5) | 31 | map only; evidence of Phase 5 |
+| 8.4 | Liveness and readiness | 26 | `HealthProbesTest`, `DatabaseOutageHealthTest`, `ProbeConfigTest`, `HealthProbesGatewayTest`, `labs/resilience/probes-lab.sh` |
+| 8.5 | Graceful shutdown | 27 | `GracefulShutdownTest`, `labs/resilience/shutdown-lab.sh` |
+| 8.6 | Horizontal and vertical scaling | 30 | `compose.scale.yaml`, `labs/scale/scale-lab.sh` |
+| 8.7 | Reverse proxy | 32 | `ReverseProxyGatewayTest`, `ClientAddressFilterTest` |
+
+Acceptance criteria:
+
+- Retry count and eligible failure classes are bounded: `VERIFIED`. Gateway: 2 extra attempts, `GET` only, 502/503/504 and timeouts
+  (`RetryTimeoutGatewayTest`, unit 5.6, which still passes: a failing GET is sent 3 times, a POST once). Client policy: `BackoffPolicyTest`
+  (an always-failing action is called exactly `maxAttempts` times, a non-eligible exception once).
+- Jitter is testable or observable: `VERIFIED`. Observed on the gateway through the WireMock journal in two runs (219 to 317 ms and 233
+  to 625 ms with 0.5, 209 to 239 ms and 408 to 424 ms with 0) and tested with a seeded random source in the client policy; the setting was
+  silently ignored before it was wired, which the test caught.
+- Idempotency keys reject reuse with a different request payload: `VERIFIED` (`IdempotencyKeyTest.differentPayloadIsRefused`, 422, stock
+  unchanged; also another stock row, operation or caller; live 422 with the stock at 7).
+- Scale lab runs multiple instances and documents resource limits: `VERIFIED` for the lab and the limits (1, 2 and 3 instances at 0.5 CPU and
+  640 MiB, one at 1.5 CPU; limits shown by `docker inspect`, use by `docker stats`). The conclusions that the data supports are narrow and
+  stated in guidebook 30 (CPU bound, three small about equal to one big, large run-to-run noise); linear scaling is not claimed.
+- Graceful shutdown has a reproducible in-flight request and termination test: `VERIFIED` (`GracefulShutdownTest` in one JVM, two runs; live
+  `docker stop` 10 of 10 answered against `docker kill` 0 of 10, two runs).
+- Liveness and readiness are distinct and accurately configured: `VERIFIED` (separate groups, only readiness has the database; with the
+  database gone readiness 503 and liveness 200 in a test with its own container; live with a frozen database 503 and 200, then recovery;
+  probes open without a token in all services; compose health checks use readiness). The test that froze the shared container hung on CI and
+  was replaced.
+
+Topics of the phase that belong to other units: circuit breaker, rate limiting and load balancing are Phase 5 units `VERIFIED` with CI; the
+reverse proxy topic is unit 8.7.
+
+Open items and carried notes:
+
+1. The Eureka registry is not tied to readiness: a service that reports readiness DOWN stays UP in Eureka and keeps receiving routed traffic.
+2. The gateway answering 503 for about a minute after a downstream service restart (seen in Phases 5 and 7) was not re-tested in this phase
+   and is not fixed.
+3. The client retry code (`BackoffPolicy`, `RetryingCaller`) is lab code in the test tree; no service uses it. `Retry-After` is not honored.
+4. The idempotency purge job runs hourly; neither the schedule nor the retention was tested over time. Only successful responses are stored.
+5. Graceful shutdown behavior was tested on the warehouse (servlet, Tomcat); the catalog, gateway (reactive, Netty) and discovery have the
+   same configuration, checked in the file but not exercised with an in-flight request. `stop_grace_period` is set for all, exercised for the
+   warehouse.
+6. The gateway tests that use `WebTestClient` run in mock mode (no TCP, no client address); they do not exercise network behavior. Found in
+   unit 8.7; the new reverse proxy test uses a real HTTP client. Earlier gateway tests were not changed.
+7. A combined request with `Upgrade: websocket` through the gateway answered 503; not investigated.
+8. The build has no per-test or fork timeout: one hung test held a CI job for 44 minutes until cancelled, and GitHub's job limit is 6 hours.
+9. Scale numbers are noisy single-machine runs (one scenario varied 2x between runs; one of three runs was interrupted).
+10. Carried from earlier phases: Spring Boot 3.5 and Spring Cloud 2025.0 past OSS support; core Redis without `maxmemory`; one shared HS256
+    secret in three services; catalog and other services still on the HikariCP defaults (30 s wait); lab endpoints shipped behind
+    `stockflow.lab.unsafe-stock`; demo rows left in the compose databases.
+
+Phase 8 overall: `VERIFIED`, gate closed, with the open items above.

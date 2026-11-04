@@ -58,7 +58,9 @@ Key documents:
   zero-downtime migration, a real read replica with replication lag, and partitioning and sharding as
   isolated experiments; warehouse 100 and catalog 70 tests, CI run 41661725957 green). Open items are in
   [docs/STATUS.md](docs/STATUS.md).
-- Phase 8 - Resilience and traffic labs: IN PROGRESS (all sub-points implemented, units 8.1 to 8.7, gate review and CI pending).
+- Phase 8 - Resilience and traffic labs: VERIFIED on 2026-11-04 (gate closed; idempotency keys, retry with backoff and jitter,
+  liveness and readiness, graceful shutdown, a scale lab with resource limits, reverse proxy behavior; warehouse 128, catalog 74,
+  gateway 68 tests, CI run 41781129839 green). Open items are in [docs/STATUS.md](docs/STATUS.md).
 - Phases 9-10: NOT STARTED. Messaging and observability
   labs follow the ROADMAP order.
 
