@@ -145,6 +145,17 @@ class WarehouseSecurityTest extends AbstractWarehouseIntegrationTest {
     }
 
     @Test
+    @DisplayName("Metrics need an admin token when the lab override exposes them")
+    void metricsNeedAnAdmin() throws Exception {
+        mockMvc.perform(get("/actuator/metrics")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/actuator/metrics").header(HttpHeaders.AUTHORIZATION, user()))
+                .andExpect(status().isForbidden());
+        // not exposed in the test profile, so an admin gets past security and meets a 404
+        mockMvc.perform(get("/actuator/metrics").header(HttpHeaders.AUTHORIZATION, admin()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     @DisplayName("Anything else is denied, including actuator endpoints that are not health or info")
     void unknownPathsAreDeniedWithoutToken() throws Exception {
         mockMvc.perform(get("/actuator/env")).andExpect(status().isUnauthorized());

@@ -500,7 +500,7 @@ reproducible in-flight request/termination test. - Liveness and
 readiness are distinct and accurately configured.
 
 ### Phase 9 --- Messaging and distributed-system labs
-Status: `VERIFIED` locally 2026-11-04 (CI pending push) - units 9.1 to 9.7 and the gate review in `docs/STATUS.md` (Phase 9 gate review), `warehouse-service` `./mvnw clean verify` 154 tests passing (0 failures) and live labs `labs/messaging/dlq-lab.sh` and `labs/messaging/webhook-lab.sh`. Guidebooks `33-outbox-and-idempotent-consumer.md` to `39-backpressure.md`. Open items: outbox relay invoked on demand (RabbitMQ is opt-in `--profile messaging`), no per-row attempt counter on `stock_outbox`, Saga/CQRS/Event Sourcing are test-tree labs.
+Status: `VERIFIED` 2026-11-04 - units 9.1 to 9.7 and the gate review in `docs/STATUS.md` (Phase 9 gate review), merged to `main` (`5d810a0`), `warehouse-service` `./mvnw clean verify` 154 tests passing (0 failures) and live labs `labs/messaging/dlq-lab.sh` and `labs/messaging/webhook-lab.sh`. Guidebooks `33-outbox-and-idempotent-consumer.md` to `39-backpressure.md`. Open items: outbox relay invoked on demand (RabbitMQ is opt-in `--profile messaging`), no per-row attempt counter on `stock_outbox`, Saga/CQRS/Event Sourcing are test-tree labs.
 
 Add optional Compose profile/infrastructure for RabbitMQ and workers.
 
@@ -521,6 +521,7 @@ primary persistence model. - Backpressure lab shows bounded
 queue/consumer behavior under load.
 
 ### Phase 10 --- Observability, docs and release
+Status: `VERIFIED` 2026-11-04 - units 10.1 to 10.3 and the gate review in `docs/STATUS.md` (Phase 10 gate review & release checklist). Admin-gated Actuator `/actuator/metrics`, `RequestCorrelationFilter` (`X-Request-Id`, `X-Trace-Id`, structured MDC logs), `SensitiveDataRedactor`, zero-dependency `ZipkinSpanExporterConfig` across `api-gateway`, `catalog-service`, and `warehouse-service`, Jaeger (`jaegertracing/all-in-one:1.62.0`) under `--profile observability`, `ObservabilityAndRedactionTest` + `JaegerTracingExportTest`, live `labs/observability/tracing-lab.sh`, and `guidebooks/40-observability-and-jaeger-tracing.md`.
 
 **Deliverables** - Actuator health/metrics. - Structured logging with
 trace/correlation IDs. - OpenTelemetry/Jaeger lab. - Complete README and
@@ -542,56 +543,56 @@ evidence.
 Use the exact topic names below in `ROADMAP.md`, each linked to its
 guidebook/lab and evidence file.
 
-1.  Race Conditions
-2.  Deadlocks
-3.  Database Transactions
-4.  ACID Properties
-5.  Isolation Levels
-6.  Optimistic Locking
-7.  Pessimistic Locking
-8.  Connection Pooling
-9.  N+1 Queries
-10. Database Indexes
-11. Query Optimization
-12. EXPLAIN ANALYZE
-13. Foreign Key Constraints
-14. Unique Constraints
-15. Database Migrations
-16. Zero-Downtime Migrations
-17. Read Replicas
-18. Replication Lag
-19. Database Sharding
-20. Partitioning
-21. Cache Invalidation
-22. Redis Eviction
-23. Cache Stampedes
-24. Distributed Caching
-25. Idempotency
-26. Retry Mechanisms
-27. Exponential Backoff
-28. Jitter
-29. Circuit Breakers
-30. Rate Limiting
-31. Load Balancing
-32. Horizontal Scaling
-33. Vertical Scaling
-34. Reverse Proxies
-35. Message Queues
-36. Dead Letter Queues
-37. Background Workers
-38. Job Scheduling
-39. Event-Driven Architecture
-40. Webhook Verification
-41. Webhook Retries
-42. Eventual Consistency
-43. Distributed Transactions
-44. Outbox Pattern
-45. CQRS
-46. Event Sourcing
-47. Backpressure
-48. Graceful Shutdown
-49. Health Checks
-50. Distributed Tracing
+1.  Race Conditions --- `VERIFIED` ([guidebook 15](guidebooks/15-race-condition.md), `RaceConditionStockTest`, `labs/database/race-lab.sh`, [docs/STATUS.md](docs/STATUS.md))
+2.  Deadlocks --- `VERIFIED` ([guidebook 17](guidebooks/17-deadlock.md), `DeadlockTransferTest`, [docs/STATUS.md](docs/STATUS.md))
+3.  Database Transactions --- `VERIFIED` ([guidebook 18](guidebooks/18-isolation-levels.md), `IsolationLevelsTest`, `StockService`, [docs/STATUS.md](docs/STATUS.md))
+4.  ACID Properties --- `VERIFIED` ([guidebook 18](guidebooks/18-isolation-levels.md), [guidebook 22](guidebooks/22-foreign-key-and-unique-constraints.md), `IsolationLevelsTest`, `ConstraintsLabTest`, [docs/STATUS.md](docs/STATUS.md))
+5.  Isolation Levels --- `VERIFIED` ([guidebook 18](guidebooks/18-isolation-levels.md), `IsolationLevelsTest`, [docs/STATUS.md](docs/STATUS.md))
+6.  Optimistic Locking --- `VERIFIED` ([guidebook 16](guidebooks/16-optimistic-and-pessimistic-locking.md), `OptimisticLockingStockTest`, [docs/STATUS.md](docs/STATUS.md))
+7.  Pessimistic Locking --- `VERIFIED` ([guidebook 16](guidebooks/16-optimistic-and-pessimistic-locking.md), `RaceConditionStockTest`, `StockRepository.findByWarehouseAndSkuForUpdate`, [docs/STATUS.md](docs/STATUS.md))
+8.  Connection Pooling --- `VERIFIED` ([guidebook 19](guidebooks/19-connection-pooling.md), `ConnectionPoolSaturationTest`, [docs/STATUS.md](docs/STATUS.md))
+9.  N+1 Queries --- `VERIFIED` ([guidebook 20](guidebooks/20-n-plus-one.md), `NPlusOneProductQueryTest`, [docs/STATUS.md](docs/STATUS.md))
+10. Database Indexes --- `VERIFIED` ([guidebook 21](guidebooks/21-indexes-and-explain-analyze.md), `V3__product_indexes.sql`, `ProductIndexPlanTest`, [docs/STATUS.md](docs/STATUS.md))
+11. Query Optimization --- `VERIFIED` ([guidebook 20](guidebooks/20-n-plus-one.md), [guidebook 21](guidebooks/21-indexes-and-explain-analyze.md), `NPlusOneProductQueryTest`, `ProductIndexPlanTest`, [docs/STATUS.md](docs/STATUS.md))
+12. EXPLAIN ANALYZE --- `VERIFIED` ([guidebook 21](guidebooks/21-indexes-and-explain-analyze.md), `ProductIndexPlanTest`, [docs/STATUS.md](docs/STATUS.md))
+13. Foreign Key Constraints --- `VERIFIED` ([guidebook 22](guidebooks/22-foreign-key-and-unique-constraints.md), `ConstraintsLabTest`, [docs/STATUS.md](docs/STATUS.md))
+14. Unique Constraints --- `VERIFIED` ([guidebook 22](guidebooks/22-foreign-key-and-unique-constraints.md), `ConstraintsLabTest`, [docs/STATUS.md](docs/STATUS.md))
+15. Database Migrations --- `VERIFIED` ([guidebook 23](guidebooks/23-zero-downtime-migrations.md), `apps/catalog-service/src/main/resources/db/migration`, `apps/warehouse-service/src/main/resources/db/migration`, [docs/STATUS.md](docs/STATUS.md))
+16. Zero-Downtime Migrations --- `VERIFIED` ([guidebook 23](guidebooks/23-zero-downtime-migrations.md), `V3__expand_contact_email.sql`..`V5__contract_contact_info.sql`, `ZeroDowntimeMigrationTest`, [docs/STATUS.md](docs/STATUS.md))
+17. Read Replicas --- `VERIFIED` ([guidebook 24](guidebooks/24-read-replicas-and-replication-lag.md), `labs/database/replica-lab.sh`, [docs/STATUS.md](docs/STATUS.md))
+18. Replication Lag --- `VERIFIED` ([guidebook 24](guidebooks/24-read-replicas-and-replication-lag.md), `labs/database/replica-lab.sh`, [docs/STATUS.md](docs/STATUS.md))
+19. Database Sharding --- `VERIFIED` ([guidebook 25](guidebooks/25-sharding-and-partitioning.md), `ShardingRoutingLabTest`, [docs/STATUS.md](docs/STATUS.md))
+20. Partitioning --- `VERIFIED` ([guidebook 25](guidebooks/25-sharding-and-partitioning.md), `V6__movement_archive_partitioned.sql`, `PartitionPruningLabTest`, [docs/STATUS.md](docs/STATUS.md))
+21. Cache Invalidation --- `VERIFIED` ([guidebook 11](guidebooks/11-product-cache-aside.md), `ProductCacheIntegrationTest`, [docs/STATUS.md](docs/STATUS.md))
+22. Redis Eviction --- `VERIFIED` ([guidebook 12](guidebooks/12-redis-eviction.md), `RedisEvictionLabTest`, `labs/caching/eviction-lab.sh`, [docs/STATUS.md](docs/STATUS.md))
+23. Cache Stampedes --- `VERIFIED` ([guidebook 13](guidebooks/13-cache-stampede.md), `CacheStampedeLabTest`, `labs/caching/stampede-lab.sh`, [docs/STATUS.md](docs/STATUS.md))
+24. Distributed Caching --- `VERIFIED` ([guidebook 14](guidebooks/14-distributed-caching.md), `DistributedProductCacheTest`, `labs/caching/distributed-cache-lab.sh`, [docs/STATUS.md](docs/STATUS.md))
+25. Idempotency --- `VERIFIED` ([guidebook 28](guidebooks/28-idempotency-keys.md), `V7__stock_idempotency.sql`, `StockIdempotencyTest`, [docs/STATUS.md](docs/STATUS.md))
+26. Retry Mechanisms --- `VERIFIED` ([guidebook 06](guidebooks/06-timeout-and-retry.md), [guidebook 29](guidebooks/29-retry-backoff-and-jitter.md), `RetryTimeoutGatewayTest`, `RetryingCallerTest`, [docs/STATUS.md](docs/STATUS.md))
+27. Exponential Backoff --- `VERIFIED` ([guidebook 29](guidebooks/29-retry-backoff-and-jitter.md), `BackoffPolicyTest`, `RetryWithJitterGatewayTest`, [docs/STATUS.md](docs/STATUS.md))
+28. Jitter --- `VERIFIED` ([guidebook 29](guidebooks/29-retry-backoff-and-jitter.md), `BackoffPolicyTest`, `RetryJitterGatewayTest`, [docs/STATUS.md](docs/STATUS.md))
+29. Circuit Breakers --- `VERIFIED` ([guidebook 04](guidebooks/04-circuit-breaker-fallback.md), [guidebook 31](guidebooks/31-resilience-patterns-map.md), `CircuitBreakerGatewayTest`, [docs/STATUS.md](docs/STATUS.md))
+30. Rate Limiting --- `VERIFIED` ([guidebook 03](guidebooks/03-redis-rate-limiting.md), [guidebook 31](guidebooks/31-resilience-patterns-map.md), `RateLimitingGatewayTest`, [docs/STATUS.md](docs/STATUS.md))
+31. Load Balancing --- `VERIFIED` ([guidebook 05](guidebooks/05-discovery-load-balancing.md), [guidebook 31](guidebooks/31-resilience-patterns-map.md), `LoadBalancingGatewayTest`, [docs/STATUS.md](docs/STATUS.md))
+32. Horizontal Scaling --- `VERIFIED` ([guidebook 30](guidebooks/30-horizontal-and-vertical-scaling.md), `compose.scale.yaml`, `labs/resilience/scale-lab.sh`, [docs/STATUS.md](docs/STATUS.md))
+33. Vertical Scaling --- `VERIFIED` ([guidebook 30](guidebooks/30-horizontal-and-vertical-scaling.md), `compose.scale.yaml`, `labs/resilience/scale-lab.sh`, [docs/STATUS.md](docs/STATUS.md))
+34. Reverse Proxies --- `VERIFIED` ([guidebook 32](guidebooks/32-reverse-proxy.md), `ReverseProxyGatewayTest`, `ClientAddressFilterTest`, [docs/STATUS.md](docs/STATUS.md))
+35. Message Queues --- `VERIFIED` ([guidebook 34](guidebooks/34-message-queues-and-dlq.md), `RabbitMqDlqTest`, `labs/messaging/dlq-lab.sh`, [docs/STATUS.md](docs/STATUS.md))
+36. Dead Letter Queues --- `VERIFIED` ([guidebook 34](guidebooks/34-message-queues-and-dlq.md), `RabbitMqDlqTest`, `labs/messaging/dlq-lab.sh`, [docs/STATUS.md](docs/STATUS.md))
+37. Background Workers --- `VERIFIED` ([guidebook 33](guidebooks/33-outbox-and-idempotent-consumer.md), `OutboxAndWorkerTest`, [docs/STATUS.md](docs/STATUS.md))
+38. Job Scheduling --- `VERIFIED` ([guidebook 33](guidebooks/33-outbox-and-idempotent-consumer.md), `OutboxAndWorkerTest`, `OutboxService.claimNextBatch`, [docs/STATUS.md](docs/STATUS.md))
+39. Event-Driven Architecture --- `VERIFIED` ([guidebook 33](guidebooks/33-outbox-and-idempotent-consumer.md), [guidebook 37](guidebooks/37-eventual-consistency-and-cqrs.md), `OutboxAndWorkerTest`, `CqrsProjectionTest`, [docs/STATUS.md](docs/STATUS.md))
+40. Webhook Verification --- `VERIFIED` ([guidebook 35](guidebooks/35-webhooks-verification-and-retries.md), `WebhookVerifier`, `WebhookVerificationAndRetryTest`, `labs/messaging/webhook-lab.sh`, [docs/STATUS.md](docs/STATUS.md))
+41. Webhook Retries --- `VERIFIED` ([guidebook 35](guidebooks/35-webhooks-verification-and-retries.md), `WebhookVerificationAndRetryTest`, `labs/messaging/webhook-lab.sh`, [docs/STATUS.md](docs/STATUS.md))
+42. Eventual Consistency --- `VERIFIED` ([guidebook 37](guidebooks/37-eventual-consistency-and-cqrs.md), `CqrsProjectionTest`, [docs/STATUS.md](docs/STATUS.md))
+43. Distributed Transactions --- `VERIFIED` ([guidebook 36](guidebooks/36-saga-and-distributed-transactions.md), `SagaTest`, [docs/STATUS.md](docs/STATUS.md))
+44. Outbox Pattern --- `VERIFIED` ([guidebook 33](guidebooks/33-outbox-and-idempotent-consumer.md), `V8__stock_outbox.sql`, `OutboxService`, `OutboxAndWorkerTest`, [docs/STATUS.md](docs/STATUS.md))
+45. CQRS --- `VERIFIED` ([guidebook 37](guidebooks/37-eventual-consistency-and-cqrs.md), `CqrsProjectionTest`, [docs/STATUS.md](docs/STATUS.md))
+46. Event Sourcing --- `VERIFIED` ([guidebook 38](guidebooks/38-event-sourcing.md), `EventSourcedStockLedgerTest`, [docs/STATUS.md](docs/STATUS.md))
+47. Backpressure --- `VERIFIED` ([guidebook 39](guidebooks/39-backpressure.md), `BackpressureTest`, [docs/STATUS.md](docs/STATUS.md))
+48. Graceful Shutdown --- `VERIFIED` ([guidebook 27](guidebooks/27-graceful-shutdown.md), `GracefulShutdownTest`, [docs/STATUS.md](docs/STATUS.md))
+49. Health Checks --- `VERIFIED` ([guidebook 26](guidebooks/26-liveness-and-readiness.md), `HealthProbesTest`, `HealthProbesGatewayTest`, [docs/STATUS.md](docs/STATUS.md))
+50. Distributed Tracing --- `VERIFIED` ([guidebook 08](guidebooks/08-distributed-tracing.md), [guidebook 40](guidebooks/40-observability-and-jaeger-tracing.md), `TracingGatewayTest`, `ObservabilityAndRedactionTest`, `JaegerTracingExportTest`, `labs/observability/tracing-lab.sh`, [docs/STATUS.md](docs/STATUS.md))
 
 ------------------------------------------------------------------------
 
