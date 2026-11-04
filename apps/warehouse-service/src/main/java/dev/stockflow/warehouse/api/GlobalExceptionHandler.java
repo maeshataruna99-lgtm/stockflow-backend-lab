@@ -63,6 +63,13 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(WebhookSignatureException.class)
+    ProblemDetail handleWebhookSignature(WebhookSignatureException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        problem.setTitle("Invalid webhook signature");
+        return problem;
+    }
+
     @ExceptionHandler(ConcurrentUpdateException.class)
     ProblemDetail handleConcurrentUpdate(ConcurrentUpdateException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
